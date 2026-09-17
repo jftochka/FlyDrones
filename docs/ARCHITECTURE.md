@@ -31,7 +31,7 @@ Code: [`runtime.py`](../src/flydrones/runtime.py).
 | `senses/encoder.py` | features → Poisson rates per input neuron | `InputEncoder` |
 | `motor/decoder.py` | descending-neuron rates → `FlightCommand`, baselines, escape, cruise braking | `MotorDecoder` |
 | `safety.py` | clamps, slew rate, ceiling fade, floor, geofence, watchdog, battery, flight time | `SafetyGovernor`, `Telemetry` |
-| `drones/*` | backends | `SimDrone`, `TelloDrone`, `CrazyflieDrone`, `MavlinkDrone`, `UDPBridgeDrone` |
+| `drones/*` | backends | `SimDrone`, `FlyPVDrone`, `TelloDrone`, `CrazyflieDrone`, `MavlinkDrone`, `UDPBridgeDrone` |
 | `calibrate.py` | stimulus battery + ridge regression read-out | `calibrate` |
 | `viz/dashboard.py` | matplotlib dashboard, OpenCV window, GIF writer | `Dashboard` |
 
@@ -42,6 +42,33 @@ gathered with one vectorised `np.repeat` / `np.bincount` pass, so cost scales wi
 not with the total number of synapses. Arriving input sits in a ring buffer for `delay / dt` steps.
 Membrane updates are in-place numpy operations over all neurons; refractory neurons are tracked as a short
 index list. For very dense bursts it falls back to a sparse matrix-vector product.
+
+## The other simulator
+
+`drones/flypv.py` runs [FlyPV](https://github.com/jftochka/FlyPV) — an FPV
+simulator with a real 1 kHz rate-mode flight controller, prop inflow, battery
+sag and a noisy gyro — as a child process, and speaks one JSON line per step to
+it. It is a `Drone` like any other, with a `step(dt)` like `SimDrone`, so
+`run_sim` drives either.
+
+Three things make it more than a swap of one simulator for another:
+
+- **The camera is really looking at the world.** FlyPV casts a ray per pixel
+  against the geometry its physics collides with, so the flow field reaching
+  T4/T5 is real parallax rather than a drawn room.
+- **It is lockstep.** Nothing sleeps on either side: the step is asked for and
+  the answer comes back. A brain that runs at a tenth of real time flies
+  exactly the flight a fast one does, which is not true of hardware and was not
+  true of `SimDrone` either.
+- **The flight comes back as a FlyPV recording**, which replays exactly in its
+  browser UI — so what a connectome flew can be watched from the quad's camera
+  and compared against a human's on the same airframe.
+
+The mapping is in one place, and the two halves of it are worth stating: this
+repository's `throttle` is a vertical speed and FlyPV's `climb` is the same
+thing under a name that does not collide with a stick position; `yaw` is
+positive to the right on both sides, and the heading FlyPV reports on the wire
+is a compass heading rather than its own euler yaw, which runs the other way.
 
 ## Configuration
 

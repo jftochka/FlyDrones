@@ -26,3 +26,36 @@ jobs:
         run: flydrones demo --seconds 4
       - name: Browser engine matches Python
         run: node tools/check_web_engine.mjs
+
+  # The FlyPV backend talks to another repository over a protocol, and a
+  # protocol drifts silently: everything in the suite above passes just as
+  # happily against a bridge that has moved on. So one job actually flies in
+  # it. It is separate because it needs a checkout and a Node install that
+  # nothing else here does, and the suite skips those tests when there is no
+  # FlyPV to fly in.
+  flypv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: jftochka/FlyPV
+          path: FlyPV
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install FlyPV
+        run: npm ci
+        working-directory: FlyPV
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Fly the connectome in FlyPV
+        env:
+          FLYPV_REPO: ${{ github.workspace }}/FlyPV
+        # -rs, so a skip is visible: these tests skip themselves when the
+        # FlyPV checkout has no bridge in it, and a job that passes by skipping
+        # should say so rather than look like a flight.
+        run: pytest -q -rs tests/test_flypv.py

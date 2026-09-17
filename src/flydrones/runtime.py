@@ -9,7 +9,6 @@ import numpy as np
 
 from .brain import Brain
 from .drones.base import Drone
-from .drones.sim import SimDrone
 from .motor import FlightCommand, MotorDecoder
 from .safety import SafetyGovernor, Telemetry
 from .senses import GestureIllusion, InputEncoder, Retina
@@ -89,7 +88,13 @@ class Pilot:
 
 
 def run_sim(pilots: list[Pilot], seconds: float, hz: float = 20.0, on_tick=None, physics_substeps: int = 4) -> list[list[TickInfo]]:
-    """Run pilots whose drones are SimDrones in simulated time (no sleeping)."""
+    """Run pilots whose drones are stepped in simulated time (no sleeping).
+
+    A drone belongs here if it has a ``step(dt)``: the built-in ``SimDrone``,
+    and the FlyPV bridge, whose whole point is that it is driven rather than
+    driving. Nothing sleeps, so the brain sets the pace and the flight is the
+    same however long it thought about it.
+    """
     dt = 1.0 / hz
     out: list[list[TickInfo]] = [[] for _ in pilots]
     for p in pilots:
@@ -105,9 +110,11 @@ def run_sim(pilots: list[Pilot], seconds: float, hz: float = 20.0, on_tick=None,
             info = p.tick(t, dt)
             out[i].append(info)
             infos.append(info)
-            assert isinstance(p.drone, SimDrone)
+            step = getattr(p.drone, "step", None)
+            if step is None:
+                raise TypeError(f"{p.drone.name} cannot be run in simulated time: it has no step(dt). Use run_realtime.")
             for _ in range(physics_substeps):
-                p.drone.step(dt / physics_substeps)
+                step(dt / physics_substeps)
         if on_tick:
             on_tick(k, infos)
     return out

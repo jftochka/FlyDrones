@@ -38,6 +38,48 @@ def _brain(cfg, quiet: bool = False):
     return Brain(c, cfg)
 
 
+def _flypv_kwargs(args) -> dict:
+    """The FlyPV options, from flags that only exist when that backend is asked for."""
+    return {
+        "repo": getattr(args, "flypv_repo", None),
+        "world": getattr(args, "flypv_world", "warehouse"),
+        "airframe": getattr(args, "flypv_airframe", "cinewhoop3"),
+        "rates": getattr(args, "flypv_rates", "cinematic"),
+        "turbulence": getattr(args, "flypv_turbulence", 0.0),
+    }
+
+
+def _make_sim_drone(args, cfg, **extra):
+    """The simulated drone this run asked for: the built-in one, or FlyPV.
+
+    The two are interchangeable to everything above: both have a camera and a
+    ``step(dt)``, so ``run_sim`` drives either. What differs is what is on the
+    other side of the camera — a kinematic model here, a 1 kHz flight
+    controller with a real airframe under it there.
+    """
+    if getattr(args, "drone", "sim") in ("flypv", "fpv"):
+        from .drones.flypv import FlyPVDrone
+
+        vision = cfg.get("vision", {})
+        return FlyPVDrone(
+            camera=(int(vision.get("width", 96)), int(vision.get("height", 72))),
+            takeoff_height_m=float(cfg.get("safety", {}).get("max_alt_m", 2.0)) * 0.5,
+            **_flypv_kwargs(args),
+        )
+    from .drones import SimDrone
+
+    return SimDrone(**extra)
+
+
+def _save_flypv_recording(args, drone) -> None:
+    """Write the flight out as a FlyPV log, if one was asked for and there is one."""
+    path = getattr(args, "flypv_record", None)
+    if not path or not hasattr(drone, "save_recording"):
+        return
+    out = drone.save_recording(path)
+    print(f"saved the flight as a FlyPV recording -> {out}\n  replay it: open FlyPV, Records -> Load, and pick this file")
+
+
 def _record_or_show(dash, frames, infos, args, k):
     if args.record:
         if k % max(1, args.every) == 0:
@@ -57,7 +99,6 @@ _record_or_show.window = None
 
 # ---------------------------------------------------------------- commands
 def cmd_demo(args) -> int:
-    from .drones import SimDrone
     from .runtime import Pilot, run_sim
     from .senses import ScriptedGestures, demo_timeline
     from .viz import Dashboard, LiveWindow, save_gif
@@ -65,7 +106,8 @@ def cmd_demo(args) -> int:
     print(BANNER)
     cfg = _cfg(args)
     brain = _brain(cfg)
-    pilot = Pilot(brain, SimDrone(start=(-1.5, 0.0, 0.0)), cfg, gestures=ScriptedGestures(demo_timeline()))
+    drone = _make_sim_drone(args, cfg, start=(-1.5, 0.0, 0.0))
+    pilot = Pilot(brain, drone, cfg, gestures=ScriptedGestures(demo_timeline()))
     dash = Dashboard(brain, [pilot], title="FlyDrones · hand -> fly eyes -> fly brain -> drone")
     frames: list = []
     if args.live:
@@ -85,6 +127,8 @@ def cmd_demo(args) -> int:
     except KeyboardInterrupt:
         pass
     print(f"collisions: {pilot.drone.collisions}")
+    _save_flypv_recording(args, drone)
+    drone.close()
     if args.record and frames:
         save_gif(frames, args.record, fps=int(cfg["control"]["hz"] / max(1, args.every)))
         print(f"saved {len(frames)} frames -> {args.record}")
@@ -147,7 +191,18 @@ def cmd_fly(args) -> int:
         kw = {"host": args.esp32_host}
     elif args.drone == "crazyflie":
         kw = {"uri": args.uri}
-    drone = make_drone(args.drone, **kw) if args.send or args.drone == "sim" else None
+    elif args.drone in ("flypv", "fpv"):
+        vision = cfg.get("vision", {})
+        kw = {
+            "camera": (int(vision.get("width", 96)), int(vision.get("height", 72))),
+            "takeoff_height_m": float(cfg.get("safety", {}).get("max_alt_m", 2.0)) * 0.5,
+            **_flypv_kwargs(args),
+        }
+    # A simulator needs no --send: nothing can be broken by flying one, and
+    # making people opt in to a simulated flight only teaches them to type
+    # --send without thinking, which is the last habit this repository wants.
+    simulated = args.drone in ("sim", "flypv", "fpv")
+    drone = make_drone(args.drone, **kw) if args.send or simulated else None
     if drone is None:
         drone = DryRunDrone(_Stub(args.drone))
         print("DRY RUN: nothing will fly. Re-run with --send when the drone is in a safe, open space.")
@@ -182,10 +237,15 @@ def cmd_fly(args) -> int:
         dash.push([info])
         return True
 
-    if args.drone == "sim":
+    if simulated:
         from .runtime import run_sim
 
-        run_sim([pilot], args.seconds or 30, hz=cfg["control"]["hz"], on_tick=lambda k, infos: on_tick(infos[0]))
+        try:
+            run_sim([pilot], args.seconds or 30, hz=cfg["control"]["hz"], on_tick=lambda k, infos: on_tick(infos[0]))
+        except KeyboardInterrupt:
+            pass
+        _save_flypv_recording(args, drone)
+        drone.close()
     else:
         run_realtime(pilot, args.seconds, hz=cfg["control"]["hz"], on_tick=on_tick)
     if args.log:
@@ -289,8 +349,21 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--config", help="YAML file overriding defaults")
         sp.add_argument("--brain", help="minifly or path to a built .npz brain")
 
+    def flypv(sp):
+        """Options for the FlyPV backend, which are ignored by every other one."""
+        sp.add_argument("--flypv-repo", help="path to a FlyPV checkout (default: $FLYPV_REPO or a sibling directory)")
+        sp.add_argument("--flypv-world", default="warehouse", help="FlyPV location: warehouse, bachelorPad, raceTrack, carPark, valley")
+        sp.add_argument("--flypv-airframe", default="cinewhoop3",
+                        help="FlyPV airframe: cinewhoop3, tinywhoop65, freestyle5, longrange7, cinelifter10")
+        sp.add_argument("--flypv-rates", default="cinematic", help="FlyPV rate profile: cinematic, freestyle, race")
+        sp.add_argument("--flypv-turbulence", type=float, default=0.0, help="FlyPV turbulence, 0..1")
+        sp.add_argument("--flypv-record", help="save the flight as a FlyPV blackbox recording, replayable in its browser UI")
+
     sp = sub.add_parser("demo", help="simulated drone + scripted hand gestures")
     common(sp)
+    flypv(sp)
+    sp.add_argument("--drone", choices=["sim", "flypv"], default="sim",
+                    help="sim = the built-in kinematic model, flypv = a real quadcopter simulator over a pipe")
     sp.add_argument("--seconds", type=float, default=22)
     sp.add_argument("--record", help="save a GIF of the dashboard")
     sp.add_argument("--every", type=int, default=2, help="record every Nth control tick")
@@ -309,7 +382,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("fly", help="fly a real drone (dry run unless --send)")
     common(sp)
-    sp.add_argument("--drone", choices=["sim", "tello", "crazyflie", "mavlink", "esp32"], default="tello")
+    flypv(sp)
+    sp.add_argument("--drone", choices=["sim", "flypv", "tello", "crazyflie", "mavlink", "esp32"], default="tello")
     sp.add_argument("--input", choices=["camera", "gesture", "both"], default="both",
                     help="camera = drone camera optic flow, gesture = webcam hand, both = both")
     sp.add_argument("--send", action="store_true", help="really send commands to the drone")

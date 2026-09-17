@@ -75,6 +75,41 @@ flydrones swarm --live                                   # 3 drones, 3 copies of
 flydrones fly --drone sim --input camera --seconds 30 --live   # no hand, pure optic flow
 ```
 
+### 2b. Fly it with real quadcopter physics
+
+The built-in simulator moves because it was told to: a commanded velocity
+through a first-order lag. [FlyPV](https://github.com/jftochka/FlyPV) is an FPV
+simulator with an actual flight controller in it — a 1 kHz rate loop with real
+PID and filters, thrust that falls off as the quad climbs or leans, a pack that
+sags under current, and a gyro with prop vibration in it. The brain does not
+change; the aircraft under it does.
+
+```bash
+git clone https://github.com/jftochka/FlyPV ../FlyPV
+cd ../FlyPV && npm ci && cd -            # needs Node.js
+
+flydrones demo --drone flypv --seconds 20
+flydrones demo --drone flypv --flypv-airframe tinywhoop65 --flypv-world bachelorPad
+flydrones fly  --drone flypv --input camera --flypv-record flight.json
+```
+
+`--flypv-repo /path/to/FlyPV` (or `$FLYPV_REPO`) if it is not a sibling of this
+repository. Worlds: `warehouse`, `bachelorPad`, `raceTrack`, `carPark`,
+`valley`. Airframes: `cinewhoop3` (an indoor ducted quad, the default),
+`tinywhoop65`, `freestyle5`, `longrange7`, `cinelifter10`.
+
+The camera the fly sees through is cast ray by ray against the geometry the
+physics collides with, so the optic flow is real parallax. And the flight is
+saved as a FlyPV blackbox recording, which replays exactly:
+
+```bash
+cd ../FlyPV && npx vite-node tools/blackbox.ts -- ../FlyDrones/flight.json --summary
+# or open FlyPV in a browser, Records -> Load, and watch what the fly flew
+```
+
+Expect a hover to drift: a quadcopter throttle holds a vertical *speed*, not a
+height, and the governor's ceiling and floor are what keep it in the room.
+
 ## 3. Look inside the brain
 
 ```bash

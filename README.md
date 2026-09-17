@@ -91,6 +91,7 @@ When the drone really climbs, its camera sees real downward flow, which cancels 
 - **The bridge is engineered.** Which camera features feed which neurons, the tonic "I am flying" drive, and the linear read-out from descending neurons to stick commands were designed by us. Each choice is written down in [`defaults.yaml`](src/flydrones/defaults.yaml) and [docs/SCIENCE.md](docs/SCIENCE.md), with the paper it leans on.
 - **The drone's own flight controller keeps it level.** FlyDrones sends high-level stick commands (vertical speed, yaw rate, forward), like a pilot with a remote. A **safety governor** outside the brain always has the last word.
 - **The browser demo and the GIFs use MiniFly**, an 850-neuron, hand-wired stand-in with real fly cell-type names, so it runs anywhere in seconds. It is not the real connectome. The fly sitting on the 3D drone is a mascot; the pilot is the simulated brain. In the swat game the giant fiber triggers a short jump (a stand-in for a fly's takeoff jump) instead of the gentle climb used for real drones. The real 166k MaleCNS connectome loads with two commands ([below](#use-the-real-connectome)), and you calibrate its read-out with `flydrones calibrate`.
+- **The built-in simulator is kinematic**, not aerodynamic: it tracks a commanded velocity through a first-order lag. For real quadcopter physics — a 1 kHz rate loop, prop inflow, battery sag, a noisy gyro — fly it in [FlyPV](#fly-it-in-a-real-flight-simulator) instead, which is the same loop over a real flight controller.
 - **Hardware adapters are written against the official SDKs but have not been flight-tested by us yet.** Start in the simulator, then props-off, then a net or an empty room.
 
 ## Quick start
@@ -150,6 +151,53 @@ Everything below is a **dry run** (commands printed, nothing sent) until you add
 
 Setup and wiring for each drone: [docs/HARDWARE.md](docs/HARDWARE.md). Step-by-step guide: [docs/GUIDE.md](docs/GUIDE.md).
 
+## Fly it in a real flight simulator
+
+The built-in simulator is a kinematic model: it moves because it was told to.
+That is honest enough for showing the loop works and useless for believing
+anything about *flying*, because everything a controller is judged on has been
+left out — no rate loop, no prop, no battery sagging under the current a climb
+draws.
+
+[FlyPV](https://github.com/jftochka/FlyPV) is an FPV simulator that has all of
+it: a 1 kHz rate-mode flight controller with real PID and filters, thrust that
+depends on the air already moving through the disc, a gyro with noise and prop
+vibration in it, and five airframes spanning a hundred to one in inertia. Its
+physics is headless, so we run it as a child process and speak one line of JSON
+per step.
+
+```bash
+git clone https://github.com/jftochka/FlyPV ../FlyPV   # or set $FLYPV_REPO
+cd ../FlyPV && npm ci && cd -
+
+flydrones demo --drone flypv                            # the same demo, real physics
+flydrones fly  --drone flypv --flypv-world valley --flypv-airframe freestyle5
+flydrones demo --drone flypv --flypv-record flight.json # and keep the flight
+```
+
+The fly gets a camera that is really looking at the world — one ray cast per
+pixel against the geometry the physics collides with, at roughly the resolution
+a fly's eye works at — so the optic flow reaching T4/T5 comes from real
+parallax over a warehouse floor rather than from a drawn room.
+
+And the flight comes back. `--flypv-record` writes a FlyPV blackbox log, which
+replays **exactly** in FlyPV's own browser UI: you can watch what the
+connectome flew from the quad's camera, scrub it, trace every PID term in the
+flight controller it was commanding, and put it next to a human's flight on the
+same airframe.
+
+```bash
+cd ../FlyPV && npx vite-node tools/blackbox.ts -- ../FlyDrones/flight.json --summary
+```
+
+Nothing about the brain changes: the same descending neurons produce the same
+normalised commands, and the same safety governor has the last word. What
+changes is the aircraft underneath them — and a hover is no longer free, because
+holding a throttle holds a vertical *speed*, not a height.
+
+Needs Node.js and a FlyPV checkout. Protocol and options:
+[FlyPV's `docs/BRIDGE.md`](https://github.com/jftochka/FlyPV/blob/main/docs/BRIDGE.md).
+
 ## Use the real connectome
 
 ```bash
@@ -193,7 +241,7 @@ src/flydrones/
   brain/       connectome.py (MaleCNS loader, groups, subgraphs) · lif.py (simulator) · synthetic.py (MiniFly)
   senses/      retina.py (optic flow, looming) · gestures.py (hand -> illusions) · encoder.py · webcam.py
   motor/       decoder.py (descending neurons -> commands) · command.py
-  drones/      sim.py · tello.py · crazyflie.py · mavlink.py · udp_bridge.py (ESP32/MSP)
+  drones/      sim.py · flypv.py (FlyPV over a pipe) · tello.py · crazyflie.py · mavlink.py · udp_bridge.py (ESP32/MSP)
   safety.py    limits, ceiling, floor, geofence, watchdog, battery
   runtime.py   the closed loop
   calibrate.py fit the read-out on your connectome

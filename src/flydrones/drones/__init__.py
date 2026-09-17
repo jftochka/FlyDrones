@@ -18,6 +18,10 @@ def make_drone(kind: str, **kw) -> Drone:
         from .mavlink import MavlinkDrone
 
         return MavlinkDrone(**kw)
+    if kind in ("flypv", "fpv"):
+        from .flypv import FlyPVDrone
+
+        return FlyPVDrone(**kw)
     if kind in ("esp32", "udp", "betaflight"):
         from .udp_bridge import UDPBridgeDrone
 
