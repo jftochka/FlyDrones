@@ -171,7 +171,7 @@ git clone https://github.com/jftochka/FlyPV ../FlyPV   # or set $FLYPV_REPO
 cd ../FlyPV && npm ci && cd -
 
 flydrones demo --drone flypv                            # the same demo, real physics
-flydrones fly  --drone flypv --flypv-world valley --flypv-airframe freestyle5
+flydrones fly  --drone flypv --input camera --flypv-world valley --flypv-airframe freestyle5
 flydrones demo --drone flypv --flypv-record flight.json # and keep the flight
 ```
 
