@@ -49,11 +49,23 @@ def frame() -> dict:
     return {"width": w, "height": h, "pixels": base64.urlsafe_b64encode(pixels).decode().rstrip("=")}
 
 
+PLAN = {
+    "name": "The Warehouse",
+    "bounds": 60,
+    "indoors": True,
+    "footprints": [
+        {"east": -4.0, "north": 2.0, "halfEast": 1.0, "halfNorth": 3.0, "top": 4.0},
+        {"east": 3.0, "north": -5.0, "halfEast": 2.0, "halfNorth": 0.5, "top": 2.5},
+        {"east": 200.0, "north": 0.0, "halfEast": 1.0, "halfNorth": 1.0, "top": 1.0},
+    ],
+}
+
+
 def handle(request: dict) -> dict:
     op = request.get("op")
     if op == "hello":
-        return {"ok": True, "op": "hello", "protocol": PROTOCOL, "config": {}, "worlds": ["warehouse", "valley"],
-                "airframes": ["cinewhoop3"], "rates": ["cinematic"]}
+        return {"ok": True, "op": "hello", "protocol": PROTOCOL, "config": {}, "world": PLAN,
+                "worlds": ["warehouse", "valley"], "airframes": ["cinewhoop3"], "rates": ["cinematic"]}
     if op == "reset":
         config = request.get("config") or {}
         if config.get("world") not in (None, "warehouse", "valley"):
@@ -62,7 +74,7 @@ def handle(request: dict) -> dict:
             STATE["camera"] = config["camera"]
         STATE["time"] = 0.0
         STATE["phase"] = "grounded"
-        return {"ok": True, "op": "reset", "telemetry": telemetry()}
+        return {"ok": True, "op": "reset", "telemetry": telemetry(), "world": PLAN}
     if op in ("takeoff", "land", "stop"):
         STATE["phase"] = {"takeoff": "flying", "land": "landing", "stop": "grounded"}[op]
         return {"ok": True, "op": op, "telemetry": telemetry()}

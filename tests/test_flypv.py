@@ -22,7 +22,7 @@ import pytest
 
 from flydrones.drones import flypv as flypv_module
 from flydrones.drones import make_drone
-from flydrones.drones.flypv import PROTOCOL, FlyPVDrone, FlyPVError, decode_frame, find_repo
+from flydrones.drones.flypv import PROTOCOL, FlyPVDrone, FlyPVError, decode_frame, find_repo, room_from_plan
 from flydrones.motor.command import FlightCommand
 
 FAKE = [sys.executable, str(Path(__file__).with_name("fake_flypv_bridge.py"))]
@@ -144,6 +144,23 @@ def test_phase_and_crashes_are_visible():
     assert d.collisions == 2
     assert d.arming_refusal is None
     d.close()
+
+
+def test_the_world_becomes_a_room_the_dashboard_can_draw():
+    d = drone()
+    assert d.room is not None
+    # Sized to what is in it, not to the sixty-metre map it sits in the middle
+    # of: a top view drawn at map scale is a room-sized smudge.
+    assert 8 <= d.room.size_x <= 30
+    # And the thing two hundred metres away is not drawn as a wall at the edge.
+    assert len(d.room.boxes) == 2
+    d.close()
+
+
+def test_an_empty_world_still_has_a_room():
+    room = room_from_plan({"name": "field", "bounds": 900, "indoors": False, "footprints": []})
+    assert room.size_x >= 8
+    assert room.boxes == []
 
 
 def test_make_drone_knows_the_name():

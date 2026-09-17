@@ -49,6 +49,7 @@ import numpy as np
 from ..motor.command import FlightCommand
 from ..safety import Telemetry
 from .base import Drone
+from .sim import Box, Room
 
 #: Protocol the bridge in FlyPV's ``src/core/sim/bridge.ts`` speaks.
 PROTOCOL = 1
@@ -96,6 +97,37 @@ def decode_frame(camera: dict) -> np.ndarray:
     if grey.size != w * h:
         raise FlyPVError(f"bridge sent {grey.size} pixels for a {w}x{h} frame")
     return np.repeat(grey.reshape(h, w, 1), 3, axis=2)
+
+
+def room_from_plan(plan: dict, floor: float = 8.0, ceiling: float = 24.0) -> Room:
+    """FlyPV's world seen from above, as the ``Room`` the dashboard draws.
+
+    Sized to what is *near*, not to the world's own bounds and not to the
+    furthest thing in it. The warehouse is a building in the middle of a
+    hundred and twenty metres of map and the valley is a kilometre of trees,
+    while the safety governor keeps the quad inside a geofence of a few metres:
+    a top view drawn at world scale is a dot in an empty square. So the size
+    comes from the bulk of the footprints (a high percentile, so one distant
+    container does not set the scale), floored so an empty field does not
+    collapse to a point and capped so a flight of three metres is still
+    something you can see.
+    """
+    shapes = plan.get("footprints", [])
+    reaches = sorted(max(abs(f["east"]) + f["halfEast"], abs(f["north"]) + f["halfNorth"]) for f in shapes)
+    bulk = reaches[int(len(reaches) * 0.8)] if reaches else floor / 2
+    size = max(floor, min(ceiling, 2 * bulk * 1.1, 2 * float(plan.get("bounds", ceiling))))
+    boxes = [
+        Box(
+            (f["east"] - f["halfEast"], f["north"] - f["halfNorth"], 0.0),
+            (f["east"] + f["halfEast"], f["north"] + f["halfNorth"], f["top"]),
+            name="",
+        )
+        for f in shapes
+        # Anything outside the drawn square would be clipped to its edge, which
+        # reads as a wall that is not there.
+        if abs(f["east"]) - f["halfEast"] < size / 2 and abs(f["north"]) - f["halfNorth"] < size / 2
+    ]
+    return Room(size_x=size, size_y=size, height=float(plan.get("bounds", 10)), boxes=boxes)
 
 
 class FlyPVDrone(Drone):
@@ -153,6 +185,9 @@ class FlyPVDrone(Drone):
         self._t = 0.0
         self.crashes = 0
         self.hello: dict = {}
+        self.plan: dict = {}
+        #: The world in plan, in the shape the dashboard's top view draws.
+        self.room: Room | None = None
 
     # ---------------------------------------------------------------- process
     def connect(self) -> None:
@@ -182,7 +217,10 @@ class FlyPVDrone(Drone):
             known = self.hello.get(key, [])
             if known and name not in known:
                 raise FlyPVError(f"FlyPV has no {key[:-1]} called {name!r}. It has: {', '.join(known)}")
-        self._tel = self._ask({"op": "reset", "config": self.config})["telemetry"]
+        reset = self._ask({"op": "reset", "config": self.config})
+        self._tel = reset["telemetry"]
+        self.plan = reset.get("world") or self.hello.get("world") or {}
+        self.room = room_from_plan(self.plan) if self.plan else None
 
     def close(self) -> None:
         proc = self._proc
