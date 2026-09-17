@@ -13,6 +13,7 @@ This is the long version of the README, step by step, from zero to a drone in th
 - [7. First real flight (Tello)](#7-first-real-flight-tello)
 - [8. Record a video for social media](#8-record-a-video-for-social-media)
 - [9. Tuning cheat-sheet](#9-tuning-cheat-sheet)
+- [10. Make it play music](#10-make-it-play-music)
 
 ## Try it in the browser first
 
@@ -182,3 +183,15 @@ indoor drone. Full setup for each: [HARDWARE.md](HARDWARE.md).
 | never escapes | `vision.loom_gain` higher, `inputs.LPLC2_*.max_hz` higher |
 | optic flow too noisy (real camera) | `vision.blur` 2, `vision.flow_gain` higher |
 | brain slower than real time | `build-brain --core-hops 3`, `brain.lif.dt` 1.0, fewer `record_neurons` |
+
+## 10. Make it play music
+
+```bash
+flydrones compose --to strudel        # open the address it prints and press play
+flydrones compose --to pd,tidal --seconds 300
+```
+
+The same flight, read out as notes instead of stick commands: DNg02 becomes the melody, DNp03 the
+percussion, the giant fiber the crash. It speaks OSC to Pure Data and Max/MSP, `/ctrl` to TidalCycles,
+`/dirt/play` to SuperDirt and Server-Sent Events to a Strudel page in your browser, and
+`--score flight.tidal` writes the flight down as mini-notation. Full documentation: [MUSIC.md](MUSIC.md).

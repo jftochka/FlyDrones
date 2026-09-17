@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+The fly brain drone compositor: `flydrones compose` turns spikes and flight into music and sends it to
+Pure Data, Max/MSP, TidalCycles, SuperDirt and Strudel (OSC, FUDI, `/ctrl`, `/dirt/play` and Server-Sent
+Events), places notes at the spike times inside each control tick, writes the flight out as Tidal or Strudel
+mini-notation, and ships the receiving patches and a browser player. `demo` and `fly` gained `--music`.
+See [docs/MUSIC.md](docs/MUSIC.md).
+
 ## 0.1.2 - 2026-09-16
 Live demo 2.0: detailed blue quadcopter with a fly mascot, furnished bedroom with walls, day/night themes, shadows,
 swat-the-drone game driven by the looming pathway, click-to-stimulate neurons, clickable 3D objects, camera modes,

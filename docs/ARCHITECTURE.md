@@ -57,6 +57,14 @@ except `terms` blocks, which replace.
 - **New drone:** subclass `Drone` ([HARDWARE.md](HARDWARE.md#your-own-drone)).
 - **New connectome** (FlyWire, BANC...): produce a `Connectome` with `weights`, `types`, `sides` and save it.
 
+## Music
+
+`music/` is a second read-out of the same tick, running beside the flight one: a `Compositor` turns group
+firing rates and the flight command into notes and controls, and sinks render them for Pure Data, Max/MSP,
+TidalCycles, SuperDirt, Strudel or a file. It reads the spike raster, so notes carry the millisecond their
+neurons fired rather than the control grid. Nothing in it can change a command — the music is downstream of
+the safety governor. See [MUSIC.md](MUSIC.md).
+
 ## Browser port
 
 `docs/index.html` + `docs/live/` is the GitHub Pages demo. `engine.js` is a line-by-line JavaScript port of the

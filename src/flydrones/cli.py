@@ -6,6 +6,8 @@ import argparse
 import copy
 import csv
 import sys
+import time
+from pathlib import Path
 
 import numpy as np
 
@@ -67,6 +69,7 @@ def cmd_demo(args) -> int:
     brain = _brain(cfg)
     pilot = Pilot(brain, SimDrone(start=(-1.5, 0.0, 0.0)), cfg, gestures=ScriptedGestures(demo_timeline()))
     dash = Dashboard(brain, [pilot], title="FlyDrones · hand -> fly eyes -> fly brain -> drone")
+    music = _MusicTap(_music_cfg(cfg, args), brain, pilot, args.music) if args.music else None
     frames: list = []
     if args.live:
         _record_or_show.window = LiveWindow()
@@ -78,12 +81,17 @@ def cmd_demo(args) -> int:
         if label != last_label[0]:
             print(f"t={i.t:5.1f}s alt={i.tel.alt_m:4.2f} m  {label}")
             last_label[0] = label
+        if music:
+            music(i)
         _record_or_show(dash, frames, infos, args, k)
 
     try:
         run_sim([pilot], args.seconds, hz=cfg["control"]["hz"], on_tick=on_tick)
     except KeyboardInterrupt:
         pass
+    finally:
+        if music:
+            music.close()
     print(f"collisions: {pilot.drone.collisions}")
     if args.record and frames:
         save_gif(frames, args.record, fps=int(cfg["control"]["hz"] / max(1, args.every)))
@@ -171,10 +179,13 @@ def cmd_fly(args) -> int:
         window = LiveWindow()
         dash = Dashboard(brain, [pilot], title=f"FlyDrones · {args.drone}")
 
+    music = _MusicTap(_music_cfg(cfg, args), brain, pilot, args.music) if args.music else None
     tick = [0]
 
     def on_tick(info):
         tick[0] += 1
+        if music:
+            music(info)
         if window is None:
             return True
         if tick[0] % 2 == 0:
@@ -182,12 +193,16 @@ def cmd_fly(args) -> int:
         dash.push([info])
         return True
 
-    if args.drone == "sim":
-        from .runtime import run_sim
+    try:
+        if args.drone == "sim":
+            from .runtime import run_sim
 
-        run_sim([pilot], args.seconds or 30, hz=cfg["control"]["hz"], on_tick=lambda k, infos: on_tick(infos[0]))
-    else:
-        run_realtime(pilot, args.seconds, hz=cfg["control"]["hz"], on_tick=on_tick)
+            run_sim([pilot], args.seconds or 30, hz=cfg["control"]["hz"], on_tick=lambda k, infos: on_tick(infos[0]))
+        else:
+            run_realtime(pilot, args.seconds, hz=cfg["control"]["hz"], on_tick=on_tick)
+    finally:
+        if music:
+            music.close()
     if args.log:
         _write_log(args.log, pilot.history)
     return 0
@@ -269,6 +284,190 @@ def cmd_bench(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------------- music
+def _music_cfg(cfg, args) -> dict:
+    """CLI flags win over defaults.yaml, for the settings worth typing."""
+    m = cfg.setdefault("music", {})
+    for key in ("scale", "root", "cps", "tempo_from"):
+        v = getattr(args, key, None)
+        if v is not None:
+            m[key] = v
+    if getattr(args, "latency", None) is not None:
+        m["latency_s"] = args.latency
+    if getattr(args, "bpm", None):
+        m["cps"] = args.bpm / 60.0 / 4.0  # four beats to a cycle, as Tidal counts them
+    return cfg
+
+
+def _music_start(cfg, brain, targets: str):
+    """Build the compositor and the sinks, and say where the music is going."""
+    from .music import Compositor, make_sinks
+    from .music.events import note_name
+
+    comp = Compositor(cfg, brain=brain)
+    sinks = make_sinks(targets, cfg)
+    scale = comp.scale
+    print(f"compositor: {len(comp.voices)} voices on {scale.name} from {note_name(scale.root)}, "
+          f"{comp.cps:.3f} cps ({comp.cps * 60 * 4:.0f} bpm)")
+    print(sinks.describe())
+    return comp, sinks
+
+
+class _MusicTap:
+    """Hangs a compositor off any flight: ``demo --music pd``, ``fly --music strudel``."""
+
+    def __init__(self, cfg, brain, pilot, targets: str):
+        self.comp, self.sinks = _music_start(cfg, brain, targets)
+        self.pilot = pilot
+
+    def __call__(self, info) -> None:
+        if not self.comp.baselines and self.pilot.decoder.baseline:
+            self.comp.set_baselines(self.pilot.decoder.baseline)
+        self.sinks.frame(self.comp.tick(info))
+
+    def close(self) -> None:
+        self.sinks.close()
+        print(self.comp.summary())
+
+
+def _wait_for_browser(sinks, seconds: float) -> None:
+    """A browser cannot join a flight that is already over."""
+    from .music.sinks import StrudelSink
+
+    strudel = [s for s in sinks.sinks if isinstance(s, StrudelSink)]
+    if not strudel or seconds <= 0 or not sys.stdout.isatty():
+        return
+    hub = strudel[0].server
+    print(f"open {hub.url} and press play — waiting up to {seconds:.0f}s (Ctrl+C to start anyway)")
+    t0 = time.monotonic()
+    try:
+        while hub.clients == 0 and time.monotonic() - t0 < seconds:
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        print()
+    print(f"{hub.clients} browser(s) listening" if hub.clients else "nobody listening yet; flying anyway")
+
+
+def _write_scores(args, comp, frames) -> None:
+    from .music import to_strudel, to_tidal, transcribe
+    from .music.patterns import strudel_live_snippet, tidal_live_file
+
+    if getattr(args, "score", None):
+        score = transcribe(frames, steps=args.steps, max_cycles=args.score_cycles)
+        path = Path(args.score)
+        title = f"{args.seconds:.0f} s of MiniFly" if args.brain is None else f"{args.seconds:.0f} s of {args.brain}"
+        sounds = (comp.cfg.get("sounds") or {})
+        text = (to_strudel(score, sounds.get("strudel"), title) if path.suffix in (".mjs", ".js")
+                else to_tidal(score, sounds.get("superdirt"), title))
+        path.write_text(text, encoding="utf-8")
+        print(f"score -> {path} ({score.notes} notes over {score.cycles} cycles"
+              + (f", {score.dropped} lost to the grid" if score.dropped else "") + ")")
+    if getattr(args, "write_patches", None):
+        from .music.server import write_assets
+
+        out = Path(args.write_patches)
+        written = write_assets(out) + _copy_patches(out)
+        voices = [v.spec.name for v in comp.voices]
+        controls = sorted({c.name for f in frames[:1] for c in f.controls}) or ["alt", "drive", "loom"]
+        (out / "flybrain-live.tidal").write_text(tidal_live_file(voices, controls), encoding="utf-8")
+        (out / "flybrain-strudel.mjs").write_text(strudel_live_snippet(voices, controls), encoding="utf-8")
+        written += [out / "flybrain-live.tidal", out / "flybrain-strudel.mjs"]
+        print("patches -> " + ", ".join(str(w) for w in written))
+
+
+def _copy_patches(out: Path) -> list[Path]:
+    from importlib import resources
+
+    written = []
+    for name in ("flybrain.pd", "flybrain-fudi.pd", "flybrain.maxpat"):
+        text = resources.files("flydrones.music").joinpath("patches", name).read_text(encoding="utf-8")
+        (out / name).write_text(text, encoding="utf-8")
+        written.append(out / name)
+    return written
+
+
+def cmd_compose(args) -> int:
+    """Fly and play at the same time, in real time."""
+    from .drones import SimDrone
+    from .music.conductor import describe, improvisation
+    from .runtime import Pilot
+    from .senses import ScriptedGestures
+
+    print(BANNER)
+    cfg = _music_cfg(_cfg(args), args)
+    if args.replay:
+        return _compose_replay(args, cfg)
+    brain = _brain(cfg)
+    gestures = None
+    if args.gestures != "none":
+        timeline = improvisation(args.seconds, seed=args.seed)
+        gestures = ScriptedGestures(timeline)
+        print(f"conductor (seed {args.seed}): {describe(timeline)}")
+    pilot = Pilot(brain, SimDrone(start=(-1.5, 0.0, 0.0), seed=args.seed), cfg, gestures=gestures)
+    comp, sinks = _music_start(cfg, brain, args.to)
+    _wait_for_browser(sinks, args.wait)
+
+    hz = float(cfg["control"]["hz"])
+    dt = 1.0 / hz
+    frames = []
+    pilot.drone.connect()
+    pilot.warmup(pilot.decoder.settle_s + 0.1, dt)
+    comp.set_baselines(pilot.decoder.baseline)
+    if cfg["control"].get("takeoff", True):
+        pilot.drone.takeoff()
+    t0 = time.monotonic()
+    behind = False
+    try:
+        for k in range(int(args.seconds * hz)):
+            t = k * dt
+            info = pilot.tick(t, dt)
+            for _ in range(4):
+                pilot.drone.step(dt / 4)
+            frame = comp.tick(info)
+            frames.append(frame)
+            sinks.frame(frame)
+            if args.fast:
+                continue
+            slack = (t0 + (k + 1) * dt) - time.monotonic()
+            if slack > 0:
+                time.sleep(slack)
+            elif slack < -0.5 and not behind:
+                behind = True
+                print(f"warning: {-slack:.1f}s behind real time (brain at {info.rtf:.2f}x) — the music will drag")
+    except KeyboardInterrupt:
+        print("\nstopped")
+    finally:
+        pilot.drone.land()
+        sinks.close()
+    print(comp.summary() + f"; {pilot.drone.collisions} collisions")
+    _write_scores(args, comp, frames)
+    return 0
+
+
+def _compose_replay(args, cfg) -> int:
+    """Play a saved score again, without the brain. The flight is already in it."""
+    from .music import make_sinks, read_jsonl
+
+    frames = read_jsonl(args.replay)
+    sinks = make_sinks(args.to, cfg)
+    print(f"replaying {args.replay}: {len(frames)} frames, {sum(len(f.notes) for f in frames)} notes")
+    print(sinks.describe())
+    _wait_for_browser(sinks, args.wait)
+    t0 = time.monotonic() - (frames[0].t if frames else 0.0)
+    try:
+        for f in frames:
+            if not args.fast:
+                slack = (t0 + f.t) - time.monotonic()
+                if slack > 0:
+                    time.sleep(slack)
+            sinks.frame(f)
+    except KeyboardInterrupt:
+        print("\nstopped")
+    finally:
+        sinks.close()
+    return 0
+
+
 def _write_log(path, rows) -> None:
     if not rows:
         return
@@ -296,6 +495,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--every", type=int, default=2, help="record every Nth control tick")
     sp.add_argument("--live", action="store_true", help="show the dashboard in a window (needs OpenCV)")
     sp.add_argument("--log", help="write a CSV flight log")
+    sp.add_argument("--music", help="also play it: comma separated targets, see `compose --help`")
     sp.set_defaults(func=cmd_demo)
 
     sp = sub.add_parser("swarm", help="one connectome, several drone pilots (simulated)")
@@ -322,7 +522,36 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--uri", default="radio://0/80/2M/E7E7E7E7E7")
     sp.add_argument("--live", action="store_true")
     sp.add_argument("--log")
+    sp.add_argument("--music", help="also play it: comma separated targets, see `compose --help`")
     sp.set_defaults(func=cmd_fly)
+
+    sp = sub.add_parser("compose", help="fly and play music at the same time: Pd, Max/MSP, TidalCycles, Strudel",
+                        description="Fly a simulated drone with a fly brain and send the result to a live-coding "
+                                    "environment. Runs in real time so you can play along.")
+    common(sp)
+    sp.add_argument("--to", default="print,strudel",
+                    help="comma separated targets: pd, pd-fudi, max, tidal, superdirt, strudel, jsonl:FILE, print. "
+                         "Each takes an optional :port or :host:port (default print,strudel)")
+    sp.add_argument("--seconds", type=float, default=120)
+    sp.add_argument("--seed", type=int, default=0, help="the conductor's seed: same seed, same gestures")
+    sp.add_argument("--gestures", choices=["scripted", "none"], default="scripted",
+                    help="scripted = a seeded hand in front of the camera; none = the room alone")
+    sp.add_argument("--scale", help="minor_pentatonic, dorian, blues, chromatic, ... (see docs/MUSIC.md)")
+    sp.add_argument("--root", help="root note: C3, F#2, Bb4 or a MIDI number")
+    sp.add_argument("--cps", type=float, help="cycles per second for Tidal and Strudel")
+    sp.add_argument("--bpm", type=float, help="the same thing in beats per minute (4 beats to a cycle)")
+    sp.add_argument("--tempo-from", choices=["fixed", "drive", "alt"], dest="tempo_from",
+                    help="let the flight move the tempo")
+    sp.add_argument("--latency", type=float, help="scheduling headroom in seconds (default 0.2)")
+    sp.add_argument("--fast", action="store_true", help="do not pace to wall clock; for writing a score in a hurry")
+    sp.add_argument("--wait", type=float, default=20, help="seconds to wait for a browser before taking off")
+    sp.add_argument("--score", help="write the flight as mini-notation: .tidal or .mjs")
+    sp.add_argument("--steps", type=int, default=16, help="steps per cycle when quantising the score")
+    sp.add_argument("--score-cycles", type=int, default=64, dest="score_cycles", help="cycles to keep in the score")
+    sp.add_argument("--write-patches", metavar="DIR", dest="write_patches",
+                    help="write the Pd and Max patches, the Strudel page and the Tidal file for this configuration")
+    sp.add_argument("--replay", metavar="SCORE.jsonl", help="play a score saved with jsonl:FILE instead of flying")
+    sp.set_defaults(func=cmd_compose)
 
     sp = sub.add_parser("download", help="download connectome data")
     sp.add_argument("dataset", choices=["malecns"])

@@ -123,3 +123,176 @@ safety:
 control:
   hz: 20
   takeoff: true
+
+# ---------------------------------------------------------------------------
+# Compositor: neuron groups -> music (Pure Data, Max/MSP, TidalCycles, Strudel)
+# See docs/MUSIC.md. Thresholds are firing rates in Hz *above the resting rate*
+# the decoder measures during warm-up, so the same score works on MiniFly and
+# on MaleCNS, whose neurons idle at completely different rates.
+#   mode: repeat  = a note every every_s..fastest_s while the group is excited
+#         trigger = one note per burst, however long the burst lasts
+# ---------------------------------------------------------------------------
+music:
+  scale: minor_pentatonic  # see flydrones.music.events.SCALES
+  root: C3
+  cps: 0.5                 # cycles per second for Tidal/Strudel (0.5 = 120 bpm in 4/4)
+  tempo_from: fixed        # fixed | drive (DNg02 lift) | alt
+  tempo_swing: 0.4         # how far tempo_from may pull the tempo, either way
+  smoothing: 0.35          # EMA on firing rates before they become music
+  relative_to_baseline: true
+  latency_s: 0.2           # scheduling headroom: OSC timetags for SuperDirt,
+                           # a delay_ms argument for Pure Data and Max
+  drive_span_hz: 25        # DNg02 excursion above rest that counts as "full lift"
+  loom_max_hz: 110         # LPLC2/LC4 rate that saturates the loom control
+  # Voice sound names are generic; each target maps them to something it has.
+  sounds:
+    superdirt: {flybass: supersaw, flylead: superpwm, flyperc: superhat,
+                flycrash: superhoover, flyloom: supersquare, flyair: supersine}
+    strudel:   {flybass: sawtooth, flylead: triangle, flyperc: square,
+                flycrash: sawtooth, flyloom: square, flyair: sine}
+  voices:
+    lift:
+      groups: {DNg02_L: 0.5, DNg02_R: 0.5}
+      note: "wing-stroke amplitude, both sides: the bass pulse of the flight"
+      sound: flybass
+      mode: repeat
+      on_hz: 4
+      off_hz: 2
+      span_hz: 22
+      low: 36            # C2
+      high: 55
+      every_s: 0.5
+      fastest_s: 0.15
+      duration: 0.35
+      pan: 0.5
+      orbit: 0
+      channel: 1
+    wing_left:
+      group: DNg02_L
+      note: "left wing: melody, panned left; leads the right one in a turn"
+      sound: flylead
+      mode: repeat
+      on_hz: 6
+      off_hz: 3
+      span_hz: 24
+      low: 60
+      high: 84
+      every_s: 0.34
+      fastest_s: 0.11
+      duration: 0.2
+      pan: 0.18
+      orbit: 1
+      channel: 2
+    wing_right:
+      group: DNg02_R
+      note: "right wing: the same melody a beat apart; a yaw is the two drifting"
+      sound: flylead
+      mode: repeat
+      on_hz: 6
+      off_hz: 3
+      span_hz: 24
+      low: 60
+      high: 84
+      every_s: 0.29
+      fastest_s: 0.09
+      duration: 0.2
+      pan: 0.82
+      orbit: 1
+      channel: 3
+    saccade_left:
+      group: DNp03_L
+      note: "DNp03: looming-evoked flight saccade, one hit per burst"
+      sound: flyperc
+      mode: trigger
+      on_hz: 8
+      off_hz: 3
+      span_hz: 50
+      low: 67
+      high: 91
+      min_gap_s: 0.12
+      duration: 0.12
+      pan: 0.3
+      orbit: 2
+      channel: 10
+    saccade_right:
+      group: DNp03_R
+      note: "the mirror-image saccade"
+      sound: flyperc
+      mode: trigger
+      on_hz: 8
+      off_hz: 3
+      span_hz: 50
+      low: 67
+      high: 91
+      min_gap_s: 0.12
+      duration: 0.12
+      pan: 0.7
+      orbit: 2
+      channel: 10
+    giant_fiber:
+      groups: {DNp01_L: 0.5, DNp01_R: 0.5}
+      note: "DNp01: the escape. One enormous note, and nothing for half a second"
+      sound: flycrash
+      mode: trigger
+      on_hz: 12
+      off_hz: 4
+      span_hz: 40
+      low: 24
+      high: 48
+      min_gap_s: 0.5
+      duration: 1.2
+      gain: 1.0
+      pan: 0.5
+      orbit: 3
+      channel: 10
+    loom:
+      groups: {LPLC2_L: 0.35, LPLC2_R: 0.35, LC4_L: 0.15, LC4_R: 0.15}
+      note: "something is approaching: a riser that only exists while it does"
+      sound: flyloom
+      mode: repeat
+      on_hz: 10
+      off_hz: 4
+      span_hz: 90
+      low: 72
+      high: 96
+      every_s: 0.18
+      fastest_s: 0.06
+      duration: 0.1
+      gain: 0.85
+      pan: 0.5
+      orbit: 4
+      channel: 4
+    rising:
+      groups: {T4c_L: 0.5, T4c_R: 0.5}
+      note: "upward optic flow (the world sinking): sparse high texture"
+      sound: flyair
+      mode: repeat
+      on_hz: 12
+      off_hz: 6
+      span_hz: 45
+      low: 72
+      high: 96
+      every_s: 0.6
+      fastest_s: 0.25
+      duration: 0.5
+      gain: 0.6
+      pan: 0.35
+      orbit: 5
+      channel: 5
+    falling:
+      groups: {T4d_L: 0.5, T4d_R: 0.5}
+      note: "downward optic flow (the world rising): the same texture, lower"
+      sound: flyair
+      mode: repeat
+      on_hz: 12
+      off_hz: 6
+      span_hz: 55
+      low: 48
+      high: 72
+      every_s: 0.6
+      fastest_s: 0.25
+      duration: 0.5
+      gain: 0.6
+      pan: 0.65
+      orbit: 5
+      channel: 6

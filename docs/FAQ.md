@@ -15,6 +15,12 @@ So anyone can run the demo in seconds without a 1.2 GB download. Two commands sw
 **Does it learn?**
 Not yet. The connectome weights are fixed. Dopamine-based plasticity (as in DOOMFLY) is on the roadmap.
 
+**It plays music?**
+`flydrones compose` is a second read-out of the same neurons: descending-neuron bursts become notes, the
+looming and optic-flow cells become texture, and it all goes out over OSC to Pure Data, Max/MSP,
+TidalCycles or Strudel. The mapping is ours, not the fly's — [MUSIC.md](MUSIC.md) says exactly which neuron
+plays what.
+
 **Can one brain fly a swarm?**
 `flydrones swarm` copies one connectome into several brains with shared wiring and separate activity.
 Each copy flies one drone. A real swarm would also need drone-to-drone collision avoidance.

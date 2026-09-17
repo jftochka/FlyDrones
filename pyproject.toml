@@ -46,7 +46,7 @@ Issues = "https://github.com/SpikeCalls/FlyDrones/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-flydrones = ["defaults.yaml"]
+flydrones = ["defaults.yaml", "music/web/*.html", "music/web/*.mjs", "music/patches/*"]
 
 [tool.ruff]
 line-length = 130

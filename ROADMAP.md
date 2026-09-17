@@ -7,6 +7,7 @@
 - [x] Dashboard, GIF recorder, swarm mode, read-out calibration, CLI, tests
 
 ## 0.2
+- [x] Music bridge: neurons and flight -> Pure Data, Max/MSP, TidalCycles, Strudel (`flydrones compose`)
 - [ ] First real Tello and Crazyflie flights, published with logs and unedited video
 - [ ] MaleCNS group presets verified against neuPrint (haltere, ocelli, more flight DNs)
 - [ ] Retinotopic mapping from optic-lobe column coordinates

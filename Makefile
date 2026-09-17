@@ -1,4 +1,4 @@
-.PHONY: install dev test lint demo swarm gifs
+.PHONY: install dev test lint demo swarm gifs music
 
 install:
 	pip install -e ".[vision]"
@@ -21,3 +21,6 @@ swarm:
 gifs:
 	flydrones demo --seconds 21 --record assets/demo.gif --every 3
 	flydrones swarm --seconds 20 --record assets/swarm.gif --every 3
+
+music:
+	flydrones compose --to strudel

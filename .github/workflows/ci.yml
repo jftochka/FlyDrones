@@ -24,5 +24,7 @@ jobs:
         run: pytest -q
       - name: Smoke demo
         run: flydrones demo --seconds 4
+      - name: Smoke compose
+        run: flydrones compose --seconds 6 --fast --to "print,jsonl:score.jsonl" --score score.tidal
       - name: Browser engine matches Python
         run: node tools/check_web_engine.mjs

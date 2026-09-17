@@ -137,6 +137,31 @@ The simulator is event-driven: each step only touches the synapses of neurons th
 
 Hand tracking uses MediaPipe if installed (`pip install -e ".[gestures]"`), otherwise an OpenCV skin-colour detector.
 
+## Play it: the fly brain drone compositor
+
+<p align="center"><b>Pure Data · Max/MSP · TidalCycles · Strudel</b></p>
+
+A fly brain flying a drone is already a performance. `flydrones compose` turns the spikes and the flight into notes and sends them to the programs people improvise with — in real time, with no drone, no hardware and no Haskell needed:
+
+```bash
+flydrones compose --to strudel        # a browser page with an editable Strudel pattern
+flydrones compose --to pd             # OSC into a vanilla Pd patch (no externals)
+flydrones compose --to tidal          # /ctrl values for your own TidalCycles patterns
+flydrones compose --to superdirt      # straight to SuperDirt: the fly *is* the pattern
+flydrones compose --to max            # OSC into [udpreceive 7400]
+flydrones compose --write-patches ~/flybrain   # every receiving patch, for your config
+```
+
+| you hear | because |
+|---|---|
+| a bass pulse that quickens as the drone works | **DNg02**, the wing-stroke descending neurons |
+| two melody lines drifting apart | the same neurons, left and right: that is a turn |
+| a percussive hit | **DNp03**, a looming-evoked flight saccade |
+| one enormous note, then half a second of nothing | **DNp01**, the giant fiber firing to escape |
+| a riser that stops when the danger does | **LPLC2 / LC4**, the approach detectors |
+
+Notes are placed at the millisecond their neurons fired, not on the control grid, and the whole flight can be written out as TidalCycles or Strudel mini-notation with `--score flight.tidal`. Voices, scale, tempo and thresholds live in `defaults.yaml`. Full documentation: **[docs/MUSIC.md](docs/MUSIC.md)**.
+
 ## Plug in a real drone
 
 Everything below is a **dry run** (commands printed, nothing sent) until you add `--send`.
@@ -197,6 +222,8 @@ src/flydrones/
   safety.py    limits, ceiling, floor, geofence, watchdog, battery
   runtime.py   the closed loop
   calibrate.py fit the read-out on your connectome
+  music/       compositor.py (neurons -> notes) · sinks.py (Pd, Max, Tidal, SuperDirt, Strudel) · osc.py
+               patterns.py (mini-notation) · server.py (SSE) · patches/ · web/ (the Strudel page)
   viz/         live dashboard and GIF recorder
   cli.py       `flydrones ...`
 docs/index.html + docs/live/     the browser demo (three.js, JS port of the engine)

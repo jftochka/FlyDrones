@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlyDrones · fly brain compositor · Strudel</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#233041; --fg:#c9d5e3; --dim:#7d8da3;
+          --green:#39ff88; --blue:#4cc9f0; --pink:#ff4d8d; --amber:#ffb86b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  header { padding:14px 18px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:15px; margin:0; letter-spacing:.06em; color:var(--green); text-transform:uppercase; }
+  .sub { color:var(--dim); font-size:12px; }
+  main { display:grid; grid-template-columns: minmax(320px,1fr) minmax(280px,420px); gap:18px; padding:18px; align-items:start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  h2 { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin:0 0 10px; }
+  textarea { width:100%; min-height:260px; background:#0b0f14; color:var(--fg); border:1px solid var(--line);
+             border-radius:8px; padding:10px; font:13px/1.55 ui-monospace,Menlo,monospace; resize:vertical; }
+  button { background:var(--green); color:#06240f; border:0; border-radius:6px; padding:8px 16px; font-weight:700;
+           letter-spacing:.06em; cursor:pointer; font-family:inherit; }
+  button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--pink); display:inline-block; }
+  .dot.on { background:var(--green); box-shadow:0 0 8px var(--green); }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:2px 0; font-size:12px; }
+  td.k { color:var(--dim); width:88px; }
+  td.v { color:var(--blue); width:62px; text-align:right; padding-right:8px; font-variant-numeric:tabular-nums; }
+  .bar { height:7px; background:#0b0f14; border-radius:4px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--green)); width:0; }
+  .voices { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .voice { border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:11px; color:var(--dim); transition:all .12s; }
+  .voice.lit { color:#06240f; background:var(--green); border-color:var(--green); }
+  .section-name { color:var(--amber); }
+  code, .hint { color:var(--dim); font-size:11.5px; }
+  a { color:var(--blue); }
+  #log { color:var(--pink); font-size:12px; min-height:18px; margin-top:8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fly brain → Strudel</h1>
+  <span class="sub"><span class="dot" id="dot"></span> <span id="status">waiting for the flight…</span></span>
+  <span class="sub">section <b class="section-name" id="section">—</b></span>
+  <span class="sub" id="frames">0 frames</span>
+</header>
+
+<main>
+  <section>
+    <h2>Pattern · Strudel keeps the clock, the fly supplies the values</h2>
+    <textarea id="code" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="play">▶ play</button>
+      <button id="stop" class="ghost">■ hush</button>
+      <button id="reset" class="ghost">reset pattern</button>
+      <span class="hint">edit and press play again · <a href="https://strudel.cc/learn/" target="_blank" rel="noreferrer">strudel docs</a></span>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>What the brain is doing</h2>
+    <table id="controls"></table>
+    <h2 style="margin-top:14px">Voices</h2>
+    <div class="voices" id="voices"></div>
+    <p class="hint" style="margin-bottom:0">
+      <code>fly.c(name)</code> a control · <code>fly.n(voice)</code> its last note ·
+      <code>fly.gate(voice, s)</code> 1 just after it fired · <code>fly.notes(voice, 4)</code> the last few.
+    </p>
+  </section>
+</main>
+
+<script src="https://unpkg.com/@strudel/web@1.3.0"></script>
+<script type="module">
+import { connectFly } from './flybrain.mjs';
+
+const DEFAULT_PATTERN = `// The fly is playing. Every value below comes from a neuron.
+stack(
+  // DNg02, the wing-stroke descending neurons: one wing per side of the mix
+  note(signal(() => fly.n('wing_left', 60))).s("triangle").pan(.2).struct("t*4"),
+  note(signal(() => fly.n('wing_right', 60))).s("triangle").pan(.8).struct("~ t ~ t"),
+
+  // lift: both wings together, an octave down, opened up by what the eyes see
+  note(signal(() => fly.n('lift', 36))).s("sawtooth").struct("t ~ ~ t")
+    .lpf(signal(() => 250 + 3500 * fly.c('bright'))).gain(.7),
+
+  // looming: it only exists while something is coming at the drone
+  note(signal(() => fly.n('loom', 84))).s("square").struct("t*8")
+    .gain(signal(() => .55 * fly.c('loom'))).room(.3),
+
+  // the giant fiber. One hit, then nothing for half a second
+  note(signal(() => fly.n('giant_fiber', 28))).s("sawtooth").struct("t*2")
+    .gain(signal(() => fly.gate('giant_fiber', .45))).decay(.3)
+).gain(signal(() => .35 + .5 * fly.c('drive')))`;
+
+const $ = (id) => document.getElementById(id);
+const fly = connectFly('/events', { onStatus: (s) => { $('status').textContent = s; $('dot').classList.toggle('on', s === 'connected'); } });
+$('code').value = DEFAULT_PATTERN;
+
+// --- meters -----------------------------------------------------------------
+const METERS = [['drive','lift (DNg02)'],['loom','looming'],['alt','altitude'],['climb','climb cmd'],
+                ['turn','yaw cmd'],['bright','brightness'],['escape','escape'],['battery','battery']];
+const rows = {};
+for (const [key, label] of METERS) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="k">${label}</td><td class="v">0.00</td><td><div class="bar"><i></i></div></td>`;
+  $('controls').appendChild(tr);
+  rows[key] = { v: tr.children[1], bar: tr.children[2].firstElementChild.firstElementChild };
+}
+const lamps = {};
+function lamp(voice) {
+  if (!lamps[voice]) {
+    const el = document.createElement('span');
+    el.className = 'voice';
+    el.textContent = voice;
+    $('voices').appendChild(el);
+    lamps[voice] = el;
+  }
+  return lamps[voice];
+}
+fly.onNote((e) => {
+  const el = lamp(e.voice);
+  el.classList.add('lit');
+  setTimeout(() => el.classList.remove('lit'), Math.max(90, e.duration * 1000));
+});
+
+function paint() {
+  for (const [key] of METERS) {
+    const v = fly.c(key);
+    rows[key].v.textContent = v.toFixed(2);
+    rows[key].bar.style.width = `${Math.min(100, Math.abs(v) * 100)}%`;
+  }
+  $('section').textContent = fly.section;
+  $('frames').textContent = `${fly.frames} frames · ${fly.cps.toFixed(2)} cps`;
+  requestAnimationFrame(paint);
+}
+paint();
+
+// --- strudel ----------------------------------------------------------------
+let started = false;
+async function start() {
+  if (typeof initStrudel !== 'function') {
+    $('log').textContent = 'Strudel did not load (offline? blocked CDN?). The meters still work.';
+    return false;
+  }
+  if (!started) {
+    // dirt-samples are a bonus: the default pattern only uses built-in synths,
+    // so a blocked download costs you s("bd") and nothing else.
+    await initStrudel({ prebake: () => samples('github:tidalcycles/dirt-samples').catch(() => {}) });
+    fly.useStrudel({ signal: globalThis.signal });
+    started = true;
+    setInterval(() => { if (globalThis.setcps && fly.frames) setcps(fly.cps); }, 500);
+  }
+  return true;
+}
+$('play').addEventListener('click', async () => {
+  if (!(await start())) return;
+  try {
+    $('log').textContent = '';
+    await evaluate($('code').value);
+  } catch (err) {
+    $('log').textContent = String(err);
+  }
+});
+$('stop').addEventListener('click', () => { try { hush(); } catch (err) { $('log').textContent = String(err); } });
+$('reset').addEventListener('click', () => { $('code').value = DEFAULT_PATTERN; });
+</script>
+</body>
+</html>

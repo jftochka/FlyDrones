@@ -18,3 +18,8 @@ flight*.csv
 Thumbs.db
 .idea/
 .vscode/
+
+# music scores written by `flydrones compose`
+score.jsonl
+score.tidal
+flight-score.jsonl
