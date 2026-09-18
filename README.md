@@ -158,6 +158,16 @@ A sparse code of what the eye sees lands on **360 Kenyon cells**; **APL** keeps 
 
 Alongside it, a ring of **EPG** columns holds a heading: **Delta7** inhibition leaves a single bump, **PEN** cells driven by the halteres push it round as the body turns (0.0°/s of drift while hovering), and **PFL3** steers until the bump lines up with a goal held by **FC2** — so `set_goal(90)` makes the fly turn and hold a course it worked out itself. Full write-up, with every number measured: **[docs/COGNITION.md](docs/COGNITION.md)**.
 
+## Flying on an Orange LTE router
+
+```bash
+flydrones link --link mock                  # the whole thing without a router
+flydrones link --link orange-airbox         # or a real Airbox / Flybox / Home 4G+
+flydrones fly --drone tello --link orange-airbox --send
+```
+
+Wi-Fi fails at a wall and you know why; a mobile link *degrades* — RSRP slides as you fly away from the mast, SINR collapses when the cell fills up, the round trip goes from 40 ms to 600 ms and the commands still arrive, late. So FlyDrones reads the modem itself (RSRP, RSRQ, SINR, band, cell, over the router's own LAN API) and times a round trip to the drone's endpoint, turns both into one score, and gives it to the safety governor: **below 0.35 the drone stops going anywhere and hovers, below 0.15 it lands** — before the link decides for it. Every threshold is in one table, the mock drives the whole chain from full coverage to none in a minute, and the brain never sees any of it. Details: **[docs/LTE.md](docs/LTE.md)**.
+
 ## Watch a flight in 3D
 
 <p align="center"><img src="assets/flight3d.gif" alt="Eight approaches to a chair, replayed in 3D: the path turns from blue to green as the fly learns" width="100%"></p>
@@ -261,6 +271,7 @@ src/flydrones/
   senses/      retina.py (optic flow, looming) · gestures.py (hand -> illusions) · encoder.py · webcam.py
   motor/       decoder.py (descending neurons -> commands) · command.py
   drones/      sim.py · tello.py · crazyflie.py · mavlink.py · udp_bridge.py (ESP32/MSP)
+  link/        router.py (Orange Airbox/Flybox, Huawei HiLink and ZTE) · probe.py (the LTE prober)
   safety.py    limits, ceiling, floor, geofence, watchdog, battery
   runtime.py   the closed loop
   calibrate.py fit the read-out on your connectome

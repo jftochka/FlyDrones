@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -15,6 +16,9 @@ from .motor import FlightCommand, MotorDecoder
 from .safety import SafetyGovernor, Telemetry
 from .senses import GestureIllusion, InputEncoder, Retina
 from .senses.gestures import GestureState
+
+if TYPE_CHECKING:  # only for the annotation: a drone on Wi-Fi never imports the link package
+    from .link import LinkProbe, LinkQuality
 
 
 @dataclass
@@ -32,12 +36,14 @@ class TickInfo:
     spikes: int = 0
     brain_ms: float = 0.0  # brain clock at the end of this tick
     cognition: CognitiveState | None = None  # what the memory and the compass say
+    link: LinkQuality | None = None  # the last LTE reading, when the drone is flying on one
 
 
 class Pilot:
     """One brain flying one drone."""
 
-    def __init__(self, brain: Brain, drone: Drone, cfg: dict, gestures=None, webcam=None, name: str = "fly-1"):
+    def __init__(self, brain: Brain, drone: Drone, cfg: dict, gestures=None, webcam=None, name: str = "fly-1",
+                 link: LinkProbe | None = None):
         self.name = name
         self.brain = brain
         self.drone = drone
@@ -50,6 +56,7 @@ class Pilot:
         self.safety = SafetyGovernor(cfg)
         self.illusion = GestureIllusion()
         self.cognition = Cognition(brain, cfg) if cfg.get("cognition", {}).get("enabled", True) else None
+        self.link = link  # a flydrones.link.LinkProbe, or None for a drone on Wi-Fi
         self.history: list[dict] = []
         self._t0 = None
         self._collisions = 0
@@ -102,7 +109,8 @@ class Pilot:
             if raw.escape and not self._escaping:
                 self.cognition.punish(float(self.cfg.get("cognition", {}).get("punish_on_escape", 0.0)))
             self._escaping = bool(raw.escape)
-        cmd = self.safety.filter(raw, tel, dt)
+        quality = self.link.last if self.link is not None else None
+        cmd = self.safety.filter(raw, tel, dt, link=quality)
         if self.safety.land_requested:
             self.drone.land()
         else:
@@ -112,7 +120,7 @@ class Pilot:
                              "escape": cmd.escape, **{f"hz_{k}": v for k, v in rates.items() if k.startswith("DN")}})
         return TickInfo(t, cam if cam is not None else frame, rates, raw, cmd, tel, g, self.illusion.mode if g is not None else "camera",
                         self.brain.last_raster, self.brain.realtime_factor, int(self.brain.last_counts.sum()),
-                        self.brain.net.t_ms, cog)
+                        self.brain.net.t_ms, cog, quality)
 
 
 def run_sim(pilots: list[Pilot], seconds: float, hz: float = 20.0, on_tick=None, physics_substeps: int = 4) -> list[list[TickInfo]]:

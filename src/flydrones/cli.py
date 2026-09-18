@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import json
 import sys
 import time
 from pathlib import Path
@@ -181,7 +182,20 @@ def cmd_fly(args) -> int:
 
         webcam = Webcam(args.webcam)
         gestures = make_gesture_source(args.gestures)
-    pilot = Pilot(brain, drone, cfg, gestures=gestures, webcam=webcam)
+    probe = None
+    if getattr(args, "link", None):
+        from .link import LinkError
+
+        try:
+            probe = _make_probe(args)
+            probe.start()
+        except LinkError as e:
+            print(f"you asked to fly on LTE and there is no LTE: {e}", file=sys.stderr)
+            return 2
+        print(f"link: {probe.summary()}")
+        if probe.last is not None and probe.last.score < cfg["safety"]["link"]["hold_below"]:
+            print("the link is already below the hold threshold; the governor will not let it go anywhere")
+    pilot = Pilot(brain, drone, cfg, gestures=gestures, webcam=webcam, link=probe)
     if args.input == "gesture" and drone.has_camera:
         drone.has_camera = False  # hand only
 
@@ -217,6 +231,9 @@ def cmd_fly(args) -> int:
     finally:
         if music:
             music.close()
+        if probe is not None:
+            probe.stop()
+            print(f"link at the end: {probe.summary()}")
     if args.log:
         _write_log(args.log, pilot.history)
     return 0
@@ -373,6 +390,80 @@ def cmd_radio(args) -> int:
     print(f"\noff air after {station.t / 60:.1f} minutes: {plural(c['shows'], 'show', 'shows')}, "
           f"{plural(c['escapes'], 'escape', 'escapes')}, {plural(c['lessons'], 'thing learned', 'things learned')}, "
           f"{plural(c['collisions'], 'bump', 'bumps')}, {plural(c['packs'], 'pack swap', 'pack swaps')}")
+    return 0
+
+
+def _make_probe(args):
+    """Build an LTE probe from the --link flags, or None."""
+    from .link import LinkProbe, make_router
+
+    if not getattr(args, "link", None):
+        return None
+    kw = {}
+    if args.link == "mock":
+        kw["seconds_to_edge"] = float(getattr(args, "link_mock_seconds", 60) or 60)
+    router = make_router(args.link, getattr(args, "link_host", None), **kw)
+    target = None
+    if getattr(args, "link_target", None):
+        host, _, port = args.link_target.partition(":")
+        target = (host, int(port or 80))
+    return LinkProbe(router, target=target, period_s=float(getattr(args, "link_period", 1.0)))
+
+
+def cmd_link(args) -> int:
+    """Watch an Orange LTE router: what the modem sees, and what the packets see."""
+    from .link import ORANGE_ROUTERS, LinkError
+
+    if args.list:
+        print("routers this knows about:")
+        for name, (kind, host, label) in ORANGE_ROUTERS.items():
+            print(f"  {name:<18s} {kind:<7s} {host:<14s} {label}")
+        print(f"  {'huawei':<18s} {'huawei':<7s} {'192.168.8.1':<14s} any other HiLink box")
+        print(f"  {'zte':<18s} {'zte':<7s} {'192.168.0.1':<14s} any other ZTE box")
+        print(f"  {'mock':<18s} {'mock':<7s} {'-':<14s} a scripted drive out of coverage, for trying this")
+        return 0
+    print(BANNER)
+    try:
+        probe = _make_probe(args)
+    except LinkError as e:
+        print(f"no router: {e}", file=sys.stderr)
+        return 2
+    if probe is None:
+        print("nothing to probe: pass --link orange-airbox (or --link mock, or --list)", file=sys.stderr)
+        return 2
+    print(f"probing {probe.router.label}"
+          + (f", round trip to {probe.pinger.host}:{probe.pinger.port}" if probe.pinger else ", no round-trip target")
+          + f", every {probe.period_s:g}s")
+    if not args.json:
+        print(f"{'time':>6s}  {'score':>5s} {'grade':<9s} link")
+    rows, t0 = [], time.monotonic()
+    try:
+        while args.seconds <= 0 or time.monotonic() - t0 < args.seconds:
+            q = probe.sample()
+            rows.append(q)
+            if args.json:
+                print(json.dumps(q.as_dict(), default=str), flush=True)
+            else:
+                print(f"{time.monotonic() - t0:6.1f}  {q.line()}", flush=True)
+            sleep = probe.period_s - (time.monotonic() - t0) % probe.period_s
+            time.sleep(max(0.0, min(probe.period_s, sleep)))
+    except KeyboardInterrupt:
+        print()
+    finally:
+        probe.stop()
+    if rows and not args.json:
+        scores = sorted(q.score for q in rows)
+        worst = min(rows, key=lambda q: q.score)
+        print(f"\n{len(rows)} reading{'' if len(rows) == 1 else 's'}: "
+              f"median score {scores[len(scores) // 2]:.2f}, worst {worst.score:.2f}"
+              + (f" ({', '.join(worst.reasons)})" if worst.reasons else ""))
+        hold = sum(1 for q in rows if q.score < 0.35)
+        if hold:
+            print(f"{hold} of them are below the hold threshold: a drone on this link would have stopped and hovered")
+    if args.csv:
+        _write_log(args.csv, [{"t": round(q.t, 2), "score": q.score, "grade": q.grade, "rtt_ms": q.rtt_ms,
+                               "loss": q.loss, **{k: v for k, v in q.signal.as_dict().items() if k != "t"}}
+                              for q in rows])
     return 0
 
 
@@ -642,6 +733,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--live", action="store_true")
     sp.add_argument("--log")
     sp.add_argument("--music", help="also play it: comma separated targets, see `compose --help`")
+    sp.add_argument("--track", help="write a 3D flight track (JSON) for docs/live/replay.html")
+    sp.add_argument("--link", help="fly on an LTE router and let the governor watch it: orange-airbox, "
+                                   "orange-flybox, huawei, zte, mock (see `flydrones link --list`)")
+    sp.add_argument("--link-host", dest="link_host")
+    sp.add_argument("--link-target", dest="link_target", metavar="HOST:PORT")
+    sp.add_argument("--link-period", dest="link_period", type=float, default=1.0)
+    sp.add_argument("--link-mock-seconds", dest="link_mock_seconds", type=float, default=60)
     sp.set_defaults(func=cmd_fly)
 
     sp = sub.add_parser("compose", help="fly and play music at the same time: Pd, Max/MSP, TidalCycles, Strudel",
@@ -671,6 +769,21 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write the Pd and Max patches, the Strudel page and the Tidal file for this configuration")
     sp.add_argument("--replay", metavar="SCORE.jsonl", help="play a score saved with jsonl:FILE instead of flying")
     sp.set_defaults(func=cmd_compose)
+
+    sp = sub.add_parser("link", help="watch an Orange LTE router: signal, round trip, and what a drone would do")
+    sp.add_argument("--link", default="auto", help="auto, orange-airbox, orange-flybox, orange-home-4g, "
+                                                   "orange-flybox-zte, huawei, zte, mock")
+    sp.add_argument("--link-host", dest="link_host", help="the router's address (default: the box's own)")
+    sp.add_argument("--link-target", dest="link_target", metavar="HOST:PORT",
+                    help="measure the round trip to this as well, e.g. the drone's control port")
+    sp.add_argument("--link-period", dest="link_period", type=float, default=1.0, help="seconds between readings")
+    sp.add_argument("--link-mock-seconds", dest="link_mock_seconds", type=float, default=60,
+                    help="with --link mock: how long the scripted drive out of coverage takes")
+    sp.add_argument("--seconds", type=float, default=0, help="stop after this long (default: until Ctrl+C)")
+    sp.add_argument("--json", action="store_true", help="one JSON object per reading")
+    sp.add_argument("--csv", help="write the readings to a CSV")
+    sp.add_argument("--list", action="store_true", help="list the routers this knows about")
+    sp.set_defaults(func=cmd_link)
 
     sp = sub.add_parser("download", help="download connectome data")
     sp.add_argument("dataset", choices=["malecns"])

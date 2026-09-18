@@ -82,6 +82,13 @@ watches for anything worth saying, and keeps the drone in the air across pack sw
 knows goes to listeners through `Sink.set_context`, which the browser target merges into every frame.
 See [RADIO.md](RADIO.md).
 
+## The link
+
+`link/` reads an LTE router (Huawei HiLink or ZTE, as Orange ships them) and times a round trip to the far
+end. `LinkProbe` polls on its own thread — a router takes tens of milliseconds to answer and the control
+loop is 20 Hz — and the flight loop reads its last verdict, which `SafetyGovernor.check_link` turns into
+hold, land or nothing. See [LTE.md](LTE.md).
+
 ## Replay
 
 `track.py` writes a flight down — position, heading, commands, and what the mushroom body and the compass

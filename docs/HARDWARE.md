@@ -5,8 +5,8 @@ FlyDrones talks to every drone through one small interface ([`drones/base.py`](.
 `throttle` (vertical speed), `yaw` (yaw rate), `forward`, `lateral`, each in −1..1. The drone's own
 flight controller turns that into motor speeds and keeps the airframe level.
 
-> Status: the simulator path is tested end to end. The Tello, Crazyflie, MAVLink and ESP32 adapters follow
-> the official SDKs but have **not been flight-tested by the authors yet**. Please open an issue with logs
+> Status: the simulator path is tested end to end. The Tello, Crazyflie, MAVLink, ESP32 and LTE adapters
+> follow the official SDKs and documented APIs but have **not been flight-tested by the authors yet**. Please open an issue with logs
 > (`--log flight.csv`) when you try one.
 
 ## DJI / Ryze Tello (recommended first drone)
@@ -42,6 +42,21 @@ flight controller turns that into motor speeds and keeps the airframe level.
   (`type_mask = 1479`). ArduPilot uses GUIDED, PX4 uses OFFBOARD (a setpoint stream is sent before switching).
 - **Telemetry used:** `LOCAL_POSITION_NED` (altitude, geofence), `ATTITUDE` (yaw rate → halteres), `SYS_STATUS` (battery).
 - **Outdoors only**, with a real RC transmitter able to switch to LOITER/LAND at any time.
+
+## Flying on an LTE link (Orange Airbox / Flybox / Home 4G+)
+
+For anything that leaves the house, the link stops being plumbing and becomes part of the airframe.
+
+- **Why:** a mobile link degrades rather than dropping — RSRP slides, SINR collapses when the cell fills up,
+  and the round trip goes from 40 ms to 600 ms while the commands still arrive, late.
+- **Boxes:** Orange Airbox (Huawei E5783/E5576), Flybox (B310s-22 / B525s-23 or ZTE MF283/MF286),
+  Home 4G+ (B818/B535). `flydrones link --list` knows their addresses.
+- **Look at it first:** `flydrones link --link orange-airbox --link-target <drone>:8889 --csv survey.csv`,
+  and walk the route you mean to fly.
+- **Fly on it:** `flydrones fly --drone tello --link orange-airbox --send`. The safety governor holds the
+  drone still when the score stays below 0.35 and lands it below 0.15 — before the link decides for it.
+- **No router to hand:** `--link mock` drives the whole chain from full coverage to none in a minute.
+- Full write-up, including every threshold: [LTE.md](LTE.md).
 
 ## Betaflight / INAV quad via ESP32 bridge
 

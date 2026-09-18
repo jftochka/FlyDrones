@@ -154,6 +154,15 @@ safety:
   brain_timeout_s: 0.5     # hover if the brain stops producing output
   min_battery_pct: 20      # land below this
   max_flight_s: 180
+  # The LTE link, when the drone is flying on one (docs/LTE.md). Only consulted
+  # when a probe is attached: `flydrones fly --link orange-airbox`. Scores come
+  # from flydrones.link.probe.THRESHOLDS.
+  link:
+    enabled: true
+    hold_below: 0.35       # below this the drone stops going anywhere and hovers
+    land_below: 0.15       # below this it lands, before the link decides for it
+    timeout_s: 5.0         # no fresh reading for this long counts as no link
+    grace_s: 2.0           # how long it has to stay bad; one bad poll is not a lost link
 
 # ---------------------------------------------------------------------------
 # Cognition: the mushroom-body memory and the central-complex compass.

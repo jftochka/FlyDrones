@@ -30,6 +30,17 @@ class Telemetry:
 class SafetyGovernor:
     def __init__(self, cfg: dict):
         s = cfg.get("safety", {})
+        link = dict(s.get("link", {}) or {})
+        # The link is part of the airframe when the airframe is on LTE: a score
+        # that stays low means the drone is about to be on its own, so it stops
+        # going anywhere first and lands if it does not come back.
+        self.link_enabled = bool(link.get("enabled", True))
+        self.link_hold = float(link.get("hold_below", 0.35))
+        self.link_land = float(link.get("land_below", 0.15))
+        self.link_timeout = float(link.get("timeout_s", 5.0))
+        self.link_grace = float(link.get("grace_s", 2.0))
+        self._link_bad_since: float | None = None
+        self._link_lost_since: float | None = None
         self.max = {"throttle": s.get("max_throttle", 0.6), "yaw": s.get("max_yaw", 0.6),
                     "forward": s.get("max_forward", 0.4), "lateral": s.get("max_lateral", 0.4)}
         self.slew = float(s.get("slew_per_s", 2.5))
@@ -49,7 +60,26 @@ class SafetyGovernor:
         if not self.events or self.events[-1] != msg:
             self.events.append(msg)
 
-    def filter(self, cmd: FlightCommand, tel: Telemetry, dt: float, brain_age_s: float = 0.0) -> FlightCommand:
+    def check_link(self, link, now: float | None = None) -> tuple[bool, bool, str]:
+        """(hold, land, why) from one link reading. One bad poll is not a lost link."""
+        if link is None or not self.link_enabled:
+            self._link_bad_since = self._link_lost_since = None
+            return False, False, ""
+        now = time.monotonic() if now is None else now
+        stale = link.age_s(now) > self.link_timeout
+        score = 0.0 if stale else float(link.score)
+        why = f"lte {link.grade} ({score:.2f})" if not stale else f"lte silent for {link.age_s(now):.0f}s"
+        for threshold, attr in ((self.link_hold, "_link_bad_since"), (self.link_land, "_link_lost_since")):
+            if score < threshold or stale:
+                if getattr(self, attr) is None:
+                    setattr(self, attr, now)
+            else:
+                setattr(self, attr, None)
+        held = self._link_bad_since is not None and now - self._link_bad_since >= self.link_grace
+        lost = self._link_lost_since is not None and now - self._link_lost_since >= self.link_grace
+        return held, lost, why
+
+    def filter(self, cmd: FlightCommand, tel: Telemetry, dt: float, brain_age_s: float = 0.0, link=None) -> FlightCommand:
         now = tel.t
         if self._start is None:
             self._start = now
@@ -59,6 +89,15 @@ class SafetyGovernor:
         if brain_age_s > self.brain_timeout:
             cmd = FlightCommand.hover("brain timeout -> hover")
             self._event("brain timeout")
+        hold_for_link, land_for_link, link_why = self.check_link(link)
+        if land_for_link:
+            self.land_requested = True
+            notes.append(f"{link_why} -> land")
+        elif hold_for_link:
+            # the note goes on the command itself, so it is not also in `notes`
+            # and printed twice on every tick the link is down
+            cmd = FlightCommand.hover(f"{link_why} -> hold")
+            self._event(f"{link_why} -> hold")
         out = {a: max(-self.max[a], min(self.max[a], getattr(cmd, a))) for a in AXES}
 
         if tel.alt_m is not None:

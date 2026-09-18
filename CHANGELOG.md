@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+LTE: `flydrones link` reads an Orange Airbox / Flybox / Home 4G+ (Huawei HiLink or ZTE) over its own LAN API,
+times a round trip to the drone's endpoint, and scores the link; the safety governor holds the drone when
+that score stays low and lands it when it goes, with `--link mock` to exercise the lot without a router.
+See [docs/LTE.md](docs/LTE.md).
+
 3D flight replay: `--track` on `learn`, `radio` and `demo` writes a flight down, `docs/live/replay.html`
 draws it in the 3D bedroom (path coloured by what the fly had learned, event markers, compass needle,
 chase and drone cameras), and `tools/record_flight_3d.py` records that page to a GIF or an MP4 without a
