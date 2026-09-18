@@ -213,6 +213,91 @@ This is the one place in the chain that throws timing away on purpose; a grid is
 makes the result editable. `--steps 16` is the default, and the run reports how many
 notes two spikes put on the same step.
 
+## Rendering it to a file
+
+Everything above needs another program running. `--render` needs nothing: it
+synthesises the score offline and writes a WAV.
+
+```bash
+flydrones compose --config configs/bright.yaml --shape arc --seconds 150 \
+                  --seed 2 --to none --render track.wav
+```
+
+`--to none` is a sink that goes nowhere, for a run whose output is the file.
+`--render` implies `--fast`: there is no reason to pace a render to the wall
+clock, and a 150-second piece renders in well under that. The run prints what it
+made:
+
+```
+audio -> track.wav (155 s, peak 0.89, -19.6 dBFS RMS, centroid 2513 Hz, width 0.37)
+```
+
+155 seconds for a 150-second flight because the reverb is allowed to finish.
+
+The synthesiser is [`music/synth.py`](../src/flydrones/music/synth.py) — numpy and
+scipy, no audio library, no real-time anything. Each voice's `sound` names a patch:
+
+| patch | what it is | who plays it |
+|---|---|---|
+| `flylead` | detuned additive saw, short glide | the wings |
+| `flybass` | the same, fewer partials, lower | lift |
+| `flyair` | slow pad, mostly reverb | the optic-flow texture |
+| `flyspark` | FM bell | Kenyon cells |
+| `flyturn` | soft lead with vibrato | the learned turn, the memory |
+| `flyperc` | click | saccades |
+| `flycrash`, `flysting` | FM, long | the giant fibre, dopamine |
+
+A patch is additive up to Nyquist (`partial_weights` caps the partial count by
+`f0`, which is the whole of the anti-aliasing), with a per-partial decay tilt so
+the top of a note dies before the bottom does. Then a stereo ping-pong delay and
+a Schroeder reverb on two sends, a soft-knee compressor, and a high shelf.
+Name the output `track.mp3` and it encodes one with ffmpeg, keeping the WAV
+beside it.
+
+### Melodic, elastic and bright, measured
+
+The three words in the brief are three settings, and each one has a number
+behind it rather than an opinion:
+
+- **Melodic** is `music.smoothing`, a low-pass on the firing rates before they
+  are quantised to the scale. At the default 0.3 the lead voices move by a step
+  (four semitones or fewer) 65% of the time and leap the rest; at 0.12 they step
+  70% of the time. Below about 0.08 the tune stops following the flight, which
+  is the point of the thing, so 0.12 is where `bright.yaml` sits. Lydian and a
+  root of D3 are the other half: the raised fourth is what makes the mode sound
+  like daylight.
+- **Elastic** is two mechanisms pulling together. `tempo_from: drive` puts the
+  tempo on the wing-stroke neurons and `tempo_swing: 0.5` lets it move half
+  again either way — over the rendered track, 0.225 to 0.675 cycles per second,
+  a factor of three. `synth.elastic` then stretches the note lengths to match,
+  so a slow passage is legato and a fast one is not; with it off the tempo moves
+  and the notes stay the length they were.
+- **Bright** is `describe()`'s `centroid_hz`, the spectral centre of mass. Read
+  it on its own scale: the same measure gives a 440 Hz sine 440 Hz, a 220 Hz
+  sawtooth 6.6 kHz, and white noise 11 kHz. The track measures **2.5 kHz**, with
+  20% of the magnitude above 4 kHz and 1.4% of the power below 120 Hz — the
+  master high-pass at 60 Hz, a separate 320 Hz high-pass on the reverb send so
+  the bass never enters the tail, and the high shelf are all there to keep that
+  last number small. The first mix had 9% down there and sounded like a room
+  rather than a sky.
+
+`--shape arc` is the other half of the piece: it gives the conductor's gestures
+a beginning, a middle and an end, so the drone is left alone at the start,
+crowded in the middle and left alone again. It shows up as note counts per third
+of the rendered track — 376, 528, 430.
+
+### The track in the repo
+
+[`assets/flight-track.mp3`](../assets/flight-track.mp3) is the command at the top
+of this section, seed 2. Every note in it is a spike: the melody is the two wing
+groups, the bass is `DNg02`, the bells are Kenyon cells firing as the fly
+recognises something, and the low FM hit at 21 seconds and again at 54 is the
+giant fibre deciding to escape — each one answered a tenth of a second later by
+the dopamine neuron a fourth above it, which is the sound of the mushroom body
+being told that whatever it just saw was worth escaping from.
+
+The `.wav` master is not committed: re-render it, it is deterministic.
+
 ## Configuration
 
 Every voice lives in the `music:` block of
@@ -267,6 +352,12 @@ flydrones fly --drone tello --send --music pd  # a real drone, in real time
   exactly a name and a value, `cN` gives a `Pattern Note`, and `/dirt/play` takes flat
   key-value pairs with the bundle time as its latency. They have not been run against a
   live SuperCollider here.
+- **The rendered track was checked by measurement, not by ear.** Nobody here has
+  heard it. Every claim in *Melodic, elastic and bright* is a number a script
+  produced — stepwise-interval share, the tempo range, the spectral centroid, the
+  band balance, the peak and the clipped-sample count (zero) — and numbers are
+  not the same thing as it sounding good. If it does not, the settings that make
+  it are all in `configs/bright.yaml` and none of them touch the flight.
 - **`compose` paces itself to the wall clock.** If the brain cannot keep up (a large
   MaleCNS core on a slow machine) it says so once and the music drags rather than
   skipping; `flydrones bench` tells you the real-time factor beforehand.

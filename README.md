@@ -213,6 +213,17 @@ flydrones compose --write-patches ~/flybrain   # every receiving patch, for your
 
 Notes are placed at the millisecond their neurons fired, not on the control grid, and the whole flight can be written out as TidalCycles or Strudel mini-notation with `--score flight.tidal`. Voices, scale, tempo and thresholds live in `defaults.yaml`. Full documentation: **[docs/MUSIC.md](docs/MUSIC.md)**.
 
+### Or just listen to it
+
+**[assets/flight-track.mp3](assets/flight-track.mp3)** — two and a half minutes of fly, rendered to a file. Melodic, elastic, bright:
+
+```bash
+flydrones compose --config configs/bright.yaml --shape arc --seconds 150 --seed 2 \
+                  --to none --render assets/flight-track.mp3
+```
+
+`--render` synthesises the score offline — numpy and scipy, no audio hardware and nothing else running — and prints what it made: `155 s, peak 0.89, -19.6 dBFS RMS, centroid 2513 Hz`. The melody is the low-passed wing rates quantised to lydian (70% of its intervals are steps rather than leaps), the tempo rides the wing-stroke neurons over a three-to-one range and the note lengths stretch with it, and `--shape arc` gives the session a beginning, a middle and an end. Nobody here has heard it: every word in that sentence is a measurement. See **[docs/MUSIC.md](docs/MUSIC.md#rendering-it-to-a-file)**.
+
 ## Plug in a real drone
 
 Everything below is a **dry run** (commands printed, nothing sent) until you add `--send`.
@@ -279,12 +290,13 @@ src/flydrones/
   radio.py     the station: a programme of shows, and a fly that never lands
   track.py     a flight written down, for the 3D replay page
   music/       compositor.py (neurons -> notes) · sinks.py (Pd, Max, Tidal, SuperDirt, Strudel) · osc.py
+               synth.py (notes -> a WAV, offline)
                patterns.py (mini-notation) · server.py (SSE) · patches/ · web/ (the Strudel page)
   viz/         live dashboard and GIF recorder
   cli.py       `flydrones ...`
 docs/index.html + docs/live/     the browser demo (three.js, JS port of the engine)
 firmware/esp32_msp_bridge/   Arduino sketch: UDP -> MSP_SET_RAW_RC
-configs/     tello, crazyflie, mavlink SITL, esp32, malecns
+configs/     tello, crazyflie, mavlink SITL, esp32, malecns, bright (the audio track)
 docs/        GUIDE · HARDWARE · SCIENCE · ARCHITECTURE · CONNECTOME_DATA · SAFETY · FAQ
 examples/    small scripts to poke neurons, write your own decoder, replay a video
 tests/       pytest suite (simulator, retina, decoder, safety, protocol, MaleCNS loader)

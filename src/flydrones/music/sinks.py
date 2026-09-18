@@ -307,6 +307,15 @@ class JsonlSink(Sink):
         self.file.close()
 
 
+class NullSink(Sink):
+    """Nowhere. For a run whose output is the rendered file, not a live target."""
+
+    kind = "none"
+
+    def frame(self, frame) -> None:
+        pass
+
+
 class PrintSink(Sink):
     """A meter in the terminal, once a second, so you can tell it is alive."""
 
@@ -368,7 +377,7 @@ class FanOut(Sink):
 
 ALIASES = {"puredata": "pd", "pure-data": "pd", "pure_data": "pd", "maxmsp": "max", "max-msp": "max",
            "maxforlive": "max", "tidal": "tidal", "tidalcycles": "tidal", "dirt": "superdirt", "sc": "superdirt",
-           "supercollider": "superdirt", "fudi": "pd-fudi", "file": "jsonl", "stdout": "print"}
+           "supercollider": "superdirt", "fudi": "pd-fudi", "file": "jsonl", "stdout": "print", "null": "none", "off": "none", "silent": "none"}
 
 
 def make_sink(spec: str, cfg: dict | None = None) -> Sink:
@@ -403,7 +412,9 @@ def make_sink(spec: str, cfg: dict | None = None) -> Sink:
         return JsonlSink(rest or "flight-score.jsonl")
     if name == "print":
         return PrintSink(float(rest) if rest else 1.0)
-    raise ValueError(f"unknown music target {spec!r}; try pd, max, tidal, superdirt, strudel, jsonl:FILE or print")
+    if name == "none":
+        return NullSink()
+    raise ValueError(f"unknown music target {spec!r}; try pd, max, tidal, superdirt, strudel, jsonl:FILE, print or none")
 
 
 def make_sinks(specs, cfg: dict | None = None) -> FanOut:

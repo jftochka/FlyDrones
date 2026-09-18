@@ -289,6 +289,18 @@ def test_make_sink_parses_targets_and_refuses_nonsense():
         make_sink("ableton", cfg())
 
 
+def test_the_none_sink_goes_nowhere_without_complaining():
+    """A render-only run still has a sink; it just has nothing to send to."""
+    sink = make_sink("none", cfg())
+    assert sink.kind == "none"
+    frame = Frame(t=0.0, cycle=0.0, cps=0.5, section="hover")
+    frame.notes = [NoteEvent(t=0.0, voice="lift", sound="flybass", note=50, velocity=0.6)]
+    sink.frame(frame)
+    sink.set_context({"show": "test"})
+    sink.close()
+    assert make_sink("off", cfg()).kind == "none"
+
+
 def test_jsonl_round_trips_a_score(tmp_path):
     path = tmp_path / "score.jsonl"
     sinks = make_sinks([f"jsonl:{path}"], cfg())
@@ -371,6 +383,26 @@ def test_the_conductor_is_deterministic():
     assert timeline[0][0] == 0.0 and timeline[-1][0] < 60
     assert all(b[0] >= a[0] for a, b in zip(timeline, timeline[1:]))
     assert all(a[1].label != b[1].label for a, b in zip(timeline, timeline[1:]))
+
+
+def test_the_arc_shape_is_quiet_at_both_ends_and_busy_in_the_middle():
+    """A rendered piece wants a beginning, a middle and an end."""
+
+    def busy(shape: str) -> list[float]:
+        """How much of each third of the timeline is spent being interfered with."""
+        seconds, thirds = 180.0, [0.0, 0.0, 0.0]
+        for seed in range(12):
+            timeline = improvisation(seconds, seed=seed, shape=shape)
+            for (t0, g), (t1, _) in zip(timeline, timeline[1:] + [(seconds, None)]):
+                if g.label == "none":
+                    continue
+                thirds[min(2, int(3 * t0 / seconds))] += t1 - t0
+        return thirds
+
+    first, middle, last = busy("arc")
+    assert middle > first and middle > last
+    flat = busy("flat")
+    assert max(flat) / min(flat) < middle / min(first, last)
 
 
 # ------------------------------------------------------------- the real loop

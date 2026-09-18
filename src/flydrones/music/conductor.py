@@ -27,15 +27,49 @@ PHRASES: dict[str, tuple[GestureState, float, float, float]] = {
 }
 
 
-def improvisation(seconds: float = 120.0, seed: int = 0, settle: float = 2.5) -> list[tuple[float, GestureState]]:
-    """A timeline of gestures for ``seconds`` of flight."""
+# How a piece is shaped rather than merely filled: quiet at the edges, busy in
+# the middle, and the thing that rushes the drone saved for the last third of
+# the build. The fly still plays it; this only decides what it is shown, and when.
+ARC = {
+    "rest": (2.6, 0.5, 2.4),      # (weight at the start, in the middle, at the end)
+    "hold": (2.4, 1.0, 2.6),
+    "climb": (0.8, 2.2, 0.9),
+    "turn_left": (0.4, 1.6, 0.5),
+    "turn_right": (0.4, 1.6, 0.5),
+    "descend": (0.6, 1.2, 1.0),
+    "loom": (0.0, 1.4, 0.1),
+}
+
+
+def _shaped(weights: dict[str, float], shape: str, position: float) -> list[float]:
+    """The phrase weights at one point through the piece, 0 at the start, 1 at the end."""
+    if shape != "arc":
+        return [weights[n] for n in weights]
+    out = []
+    for name in weights:
+        a, b, c = ARC.get(name, (1.0, 1.0, 1.0))
+        k = position * 2.0
+        curve = a + (b - a) * k if k <= 1 else b + (c - b) * (k - 1)
+        out.append(max(0.0, weights[name] * curve))
+    return out
+
+
+def improvisation(seconds: float = 120.0, seed: int = 0, settle: float = 2.5,
+                  shape: str = "flat") -> list[tuple[float, GestureState]]:
+    """A timeline of gestures for ``seconds`` of flight.
+
+    ``shape="arc"`` gives the session a beginning, a middle and an end: it
+    starts with the fly mostly left alone, works up to climbs, turns and
+    something rushing at it, and settles again.
+    """
     rng = random.Random(seed)
     names = list(PHRASES)
     weights = [PHRASES[n][1] for n in names]
     timeline: list[tuple[float, GestureState]] = [(0.0, GestureState())]
     t, last = float(settle), "rest"
+    base = dict(zip(names, weights))
     while t < seconds:
-        name = rng.choices(names, weights)[0]
+        name = rng.choices(names, _shaped(base, shape, min(1.0, t / max(1e-6, seconds))))[0]
         if name == last:
             continue  # no gesture twice in a row: the brain would not notice the second
         gesture, _w, lo, hi = PHRASES[name]

@@ -595,6 +595,33 @@ def _copy_patches(out: Path) -> list[Path]:
     return written
 
 
+def _render_audio(args, frames) -> None:
+    """Render a flight to a WAV (or an MP3, if ffmpeg is about) and say what came out."""
+    import shutil
+    import subprocess
+
+    from .music.synth import SynthConfig, describe, render, write_wav
+
+    if not getattr(args, "render", None) or not frames:
+        return
+    cfg = _music_cfg(_cfg(args), args)
+    out = Path(args.render)
+    wav = out.with_suffix(".wav")
+    audio = render(frames, cfg)
+    write_wav(wav, audio, SynthConfig.from_config(cfg).sample_rate)
+    d = describe(audio)
+    print(f"audio -> {wav} ({d['seconds']:.0f} s, peak {d['peak']:.2f}, {d['rms_dbfs']:.1f} dBFS RMS, "
+          f"centroid {d['centroid_hz']:.0f} Hz, width {d['width']:.2f})")
+    if out.suffix.lower() == ".mp3":
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            print(f"  (no ffmpeg on PATH, so it stayed a WAV: {wav})")
+            return
+        subprocess.run([ffmpeg, "-y", "-i", str(wav), "-codec:a", "libmp3lame", "-q:a", "3", str(out)],
+                       check=True, capture_output=True)
+        print(f"audio -> {out} ({out.stat().st_size / 1e6:.1f} MB)")
+
+
 def cmd_compose(args) -> int:
     """Fly and play at the same time, in real time."""
     from .drones import SimDrone
@@ -604,12 +631,15 @@ def cmd_compose(args) -> int:
 
     print(BANNER)
     cfg = _music_cfg(_cfg(args), args)
+    if args.render and not args.fast:
+        args.fast = True  # rendering is offline; there is nothing to keep in step with
+        print("--render is offline, so the flight runs as fast as it can")
     if args.replay:
         return _compose_replay(args, cfg)
     brain = _brain(cfg)
     gestures = None
     if args.gestures != "none":
-        timeline = improvisation(args.seconds, seed=args.seed)
+        timeline = improvisation(args.seconds, seed=args.seed, shape=args.shape)
         gestures = ScriptedGestures(timeline)
         print(f"conductor (seed {args.seed}): {describe(timeline)}")
     pilot = Pilot(brain, SimDrone(start=(-1.5, 0.0, 0.0), seed=args.seed), cfg, gestures=gestures)
@@ -650,6 +680,7 @@ def cmd_compose(args) -> int:
         sinks.close()
     print(comp.summary() + f"; {pilot.drone.collisions} collisions")
     _write_scores(args, comp, frames)
+    _render_audio(args, frames)
     return 0
 
 
@@ -658,6 +689,10 @@ def _compose_replay(args, cfg) -> int:
     from .music import make_sinks, read_jsonl
 
     frames = read_jsonl(args.replay)
+    if args.render:  # rendering a saved score needs no sinks and no clock
+        _render_audio(args, frames)
+        if args.to in ("", "none"):
+            return 0
     sinks = make_sinks(args.to, cfg)
     print(f"replaying {args.replay}: {len(frames)} frames, {sum(len(f.notes) for f in frames)} notes")
     print(sinks.describe())
@@ -747,12 +782,14 @@ def build_parser() -> argparse.ArgumentParser:
                                     "environment. Runs in real time so you can play along.")
     common(sp)
     sp.add_argument("--to", default="print,strudel",
-                    help="comma separated targets: pd, pd-fudi, max, tidal, superdirt, strudel, jsonl:FILE, print. "
+                    help="comma separated targets: pd, pd-fudi, max, tidal, superdirt, strudel, jsonl:FILE, print, none. "
                          "Each takes an optional :port or :host:port (default print,strudel)")
     sp.add_argument("--seconds", type=float, default=120)
     sp.add_argument("--seed", type=int, default=0, help="the conductor's seed: same seed, same gestures")
     sp.add_argument("--gestures", choices=["scripted", "none"], default="scripted",
                     help="scripted = a seeded hand in front of the camera; none = the room alone")
+    sp.add_argument("--shape", choices=["flat", "arc"], default="flat",
+                    help="arc gives the session a beginning, a middle and an end")
     sp.add_argument("--scale", help="minor_pentatonic, dorian, blues, chromatic, ... (see docs/MUSIC.md)")
     sp.add_argument("--root", help="root note: C3, F#2, Bb4 or a MIDI number")
     sp.add_argument("--cps", type=float, help="cycles per second for Tidal and Strudel")
@@ -768,6 +805,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--write-patches", metavar="DIR", dest="write_patches",
                     help="write the Pd and Max patches, the Strudel page and the Tidal file for this configuration")
     sp.add_argument("--replay", metavar="SCORE.jsonl", help="play a score saved with jsonl:FILE instead of flying")
+    sp.add_argument("--render", metavar="TRACK.wav",
+                    help="render the flight to audio with the built-in synthesiser (.wav, or .mp3 with ffmpeg)")
     sp.set_defaults(func=cmd_compose)
 
     sp = sub.add_parser("link", help="watch an Orange LTE router: signal, round trip, and what a drone would do")
