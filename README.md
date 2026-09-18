@@ -215,14 +215,20 @@ Notes are placed at the millisecond their neurons fired, not on the control grid
 
 ### Or just listen to it
 
-**[assets/flight-track.mp3](assets/flight-track.mp3)** — two and a half minutes of fly, rendered to a file. Melodic, elastic, bright:
+**[assets/flight-track.wav](assets/flight-track.wav)** — two and a half minutes of fly, arranged, rendered and mastered offline. Melodic, elastic, bright:
 
 ```bash
 flydrones compose --config configs/bright.yaml --shape arc --seconds 150 --seed 2 \
-                  --to none --render assets/flight-track.mp3
+                  --to none --render assets/flight-track.wav
 ```
 
-`--render` synthesises the score offline — numpy and scipy, no audio hardware and nothing else running — and prints what it made: `155 s, peak 0.89, -19.6 dBFS RMS, centroid 2513 Hz`. The melody is the low-passed wing rates quantised to lydian (70% of its intervals are steps rather than leaps), the tempo rides the wing-stroke neurons over a three-to-one range and the note lengths stretch with it, and `--shape arc` gives the session a beginning, a middle and an end. Nobody here has heard it: every word in that sentence is a measurement. See **[docs/MUSIC.md](docs/MUSIC.md#rendering-it-to-a-file)**.
+`--render` runs the last three stages of the chain with nothing else installed — numpy and scipy, no audio library, no hardware:
+
+- **An arrangement.** Seven sections in D lydian, a palette of six diatonic chords and two borrowed ones, and thirteen neuron groups mapped onto seven musical roles. Pitches move onto the chord that is sounding, voice leading keeps each line in its own register, and the cast changes from section to section. It invents nothing: every note in the finished piece is still a spike, and `--arrange none` renders the same flight without any of it.
+- **A synthesiser.** Additive voices capped at Nyquist, FM bells, glide, a ping-pong delay and a Schroeder reverb.
+- **A master.** ITU-R BS.1770 loudness (calibrated against the standard's own test tone), −14 LUFS, a four-times-oversampled true-peak limiter at −1 dBTP, fades, 24-bit PCM.
+
+The run prints the score and then the delivery: `155 s, 24-bit/44.1 kHz, -14.2 LUFS, -1.0 dBTP`. The arrangement is what makes it bright — it moves three fifths of the mix out of one octave of low mid and gives the bass a register of its own. Nobody here has heard it: every word of that is a measurement. See **[docs/MUSIC.md](docs/MUSIC.md#rendering-it-to-a-file)**.
 
 ## Plug in a real drone
 
@@ -290,7 +296,7 @@ src/flydrones/
   radio.py     the station: a programme of shows, and a fly that never lands
   track.py     a flight written down, for the 3D replay page
   music/       compositor.py (neurons -> notes) · sinks.py (Pd, Max, Tidal, SuperDirt, Strudel) · osc.py
-               synth.py (notes -> a WAV, offline)
+               arrange.py (a form and a harmony) · synth.py (notes -> audio) · master.py (-> a WAV)
                patterns.py (mini-notation) · server.py (SSE) · patches/ · web/ (the Strudel page)
   viz/         live dashboard and GIF recorder
   cli.py       `flydrones ...`

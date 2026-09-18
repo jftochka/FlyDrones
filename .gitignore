@@ -23,6 +23,3 @@ Thumbs.db
 score.jsonl
 score.tidal
 flight-score.jsonl
-
-# rendered audio: the mp3 is committed, the 27 MB master is not
-assets/*.wav

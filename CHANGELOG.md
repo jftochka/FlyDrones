@@ -1,11 +1,15 @@
 # Changelog
 
 ## Unreleased
-Audio: `flydrones compose --render track.wav` synthesises the score offline (numpy and scipy, no audio
-library) — additive voices capped at Nyquist, FM bells, glide, a ping-pong delay, a Schroeder reverb and a
-compressor — and `--to none` gives a render-only run a sink that goes nowhere. `configs/bright.yaml` and
-`--shape arc` are the settings behind [`assets/flight-track.mp3`](assets/flight-track.mp3), two and a half
-minutes of fly: melodic, elastic and bright, each one a measurement rather than an opinion. See
+Audio: `flydrones compose --render track.wav` writes a finished track offline — an arrangement, a
+synthesiser and a master, in numpy and scipy with no audio library. `music/arrange.py` gives a flight a
+form: seven sections in D lydian, eight chords, thirteen neuron groups mapped onto seven musical roles,
+pitches snapped onto the chord that is sounding with voice leading and register clamping to keep each line
+its own, and a cast that changes from section to section — inventing nothing, since every note is still a
+spike (`--arrange none` renders without it). `music/master.py` measures loudness to ITU-R BS.1770-4,
+calibrated against the standard's own coefficients and test tone, and delivers -14 LUFS at -1 dBTP through
+a four-times-oversampled true-peak limiter, as 24-bit PCM. `--to none` gives a render-only run a sink that
+goes nowhere. [`assets/flight-track.wav`](assets/flight-track.wav) is two and a half minutes of it. See
 [docs/MUSIC.md](docs/MUSIC.md#rendering-it-to-a-file).
 
 LTE: `flydrones link` reads an Orange Airbox / Flybox / Home 4G+ (Huawei HiLink or ZTE) over its own LAN API,

@@ -216,7 +216,7 @@ notes two spikes put on the same step.
 ## Rendering it to a file
 
 Everything above needs another program running. `--render` needs nothing: it
-synthesises the score offline and writes a WAV.
+arranges the flight, synthesises it, masters it and writes a WAV.
 
 ```bash
 flydrones compose --config configs/bright.yaml --shape arc --seconds 150 \
@@ -225,17 +225,104 @@ flydrones compose --config configs/bright.yaml --shape arc --seconds 150 \
 
 `--to none` is a sink that goes nowhere, for a run whose output is the file.
 `--render` implies `--fast`: there is no reason to pace a render to the wall
-clock, and a 150-second piece renders in well under that. The run prints what it
-made:
+clock, and a 150-second piece renders in about a minute. The run prints the
+score it is about to play and then what came out of it:
 
 ```
-audio -> track.wav (155 s, peak 0.89, -19.6 dBFS RMS, centroid 2513 Hz, width 0.37)
+arrangement 'daylight': D3 lydian, 7 sections over 51 cycles
+      0s  dawn      I                      bass colour pad
+     11s  wings     I-II                   bass colour lead pad
+     33s  current   I-II-vi-V              bass colour lead pad perc spark
+     60s  crowd     II-vi-iii-V            bass colour event lead pad perc spark
+     91s  escape    bVII-v-bVII-I          bass colour event lead pad perc spark
+    111s  settle    vi-V-I                 bass colour lead pad
+    134s  horizon   I                      colour lead pad
+audio -> track.wav (155 s, 24-bit/44.1 kHz, -14.2 LUFS, -1.0 dBTP, centroid 3398 Hz, width 0.41)
 ```
 
 155 seconds for a 150-second flight because the reverb is allowed to finish.
+WAV only, and 24-bit: there is nothing to gain from delivering a master in a
+lossy format, and a 24-bit file has no audible noise floor to worry about.
 
-The synthesiser is [`music/synth.py`](../src/flydrones/music/synth.py) — numpy and
-scipy, no audio library, no real-time anything. Each voice's `sound` names a patch:
+### The arrangement
+
+[`music/arrange.py`](../src/flydrones/music/arrange.py) is the pass that turns a
+flight into a piece. The compositor decides *when* a note happens and roughly how
+high — that is the fly, and it is not negotiable. The arranger decides everything
+a composer would decide afterwards.
+
+**Nothing in it invents a note.** Every note in the finished track is still a
+spike; the arranger moves pitches onto the chord that is sounding, thins a
+texture that would otherwise be thirteen voices from beginning to end, and
+shapes the dynamics. Render the same flight with `--arrange none` to hear
+exactly what it did.
+
+- **Roles, not voices.** Thirteen neuron groups are too many things to write for,
+  and they are named after neurons. They map onto seven roles — bass, lead, pad,
+  colour, spark, percussion, event — and the score is written for the roles.
+- **Harmony in cycles, not seconds.** The tempo here is elastic, so the form is
+  laid out in cycles and scaled to however many the flight turned out to be. The
+  same form fits a 30-second flight and a 30-minute one.
+- **Snapping, by role.** A bass note moves to the nearest chord tone and takes
+  the root on a chord change. Pads and the bells take chord tones only. The lead
+  gets the chord *and* the mode, minus any note a semitone above a chord tone —
+  the usual avoid-note rule, which is also what keeps the two borrowed chords
+  from sounding like a mistake. Percussion is left alone: its pitch is a click.
+- **Spacing.** Two voices on the same note are one voice at half the level, and
+  two a semitone apart in the same octave are a beat rather than a chord. Both
+  happen constantly, because several roles draw on the same available pitches
+  and the wings are a pair by construction. A note landing next to one another
+  voice is still holding takes the octave or the neighbouring chord tone,
+  whichever is nearer.
+
+The shipped form, `daylight`, is D lydian in seven sections, with a palette of
+six diatonic chords and two borrowed ones — `bVII` and `v`, the only two chords
+in the piece with a natural fourth in them, and the only shade in it. They are
+spent in one section, `escape`.
+
+Two rules keep the form honest about the flight underneath it:
+
+- **The giant fibre is never silenced.** A section that does not name the `event`
+  role still plays it. The giant fibre firing is the loudest thing that happens
+  to a fly, and an arrangement that mutes it because the form did not expect one
+  there is arranging a different flight from the one that was flown.
+- **The shade goes looking for an escape.** `escape` would rather start where the
+  giant fibre fires, and it will move up to 18% of the piece to get there. Past
+  that the written form wins: an arrangement that rebuilds itself around
+  whichever event happened first is not an arrangement.
+
+### The master
+
+[`music/master.py`](../src/flydrones/music/master.py) is the difference between a
+render and a track. A render is normalised to a peak, which is the wrong thing to
+normalise to — peak says nothing about how loud a thing sounds, and two pieces
+matched by peak differ by ten decibels by ear.
+
+- **Loudness, measured properly.** ITU-R BS.1770-4: K-weight the signal, mean
+  square over 400 ms blocks at 75% overlap, gate absolutely at -70 LUFS and then
+  relative to the ungated mean. The standard publishes its two biquads as
+  coefficients at 48 kHz only; here they are the analogue prototypes behind them,
+  which reproduces those coefficients exactly and measures correctly at 44.1 kHz
+  as well. `tests/test_master.py` checks both, and checks the calibration tone —
+  a 0 dBFS 1 kHz sine in one channel must read -3.01 LKFS.
+- **-14 LUFS**, which is what the streaming services normalise to, so a track
+  delivered there is neither turned down on the way in nor left quieter than
+  everything around it. The gain and the limiter run twice, because limiting
+  costs a track a little loudness and the second pass corrects for what the
+  first lost.
+- **A true-peak limiter.** Look-ahead, with the release held so a run of peaks is
+  one gain move, and the peak taken from the signal oversampled four times.
+  Limiting to sample peaks instead leaves a dense mix a decibel over the ceiling
+  once it is reconstructed — and the only fix afterwards is turning the whole
+  track down, which is the loudness you just set. The ceiling is -1 dBTP.
+- **Fades and 24-bit PCM**, so the piece begins and ends rather than being cut
+  out of a longer one, and so the format has nothing to add to it. (16-bit is
+  there too, with TPDF dither, for when the size matters more.)
+
+### The synthesiser
+
+[`music/synth.py`](../src/flydrones/music/synth.py) — numpy and scipy, no audio
+library, no real-time anything. Each voice's `sound` names a patch:
 
 | patch | what it is | who plays it |
 |---|---|---|
@@ -251,8 +338,6 @@ A patch is additive up to Nyquist (`partial_weights` caps the partial count by
 `f0`, which is the whole of the anti-aliasing), with a per-partial decay tilt so
 the top of a note dies before the bottom does. Then a stereo ping-pong delay and
 a Schroeder reverb on two sends, a soft-knee compressor, and a high shelf.
-Name the output `track.mp3` and it encodes one with ffmpeg, keeping the WAV
-beside it.
 
 ### Melodic, elastic and bright, measured
 
@@ -262,10 +347,11 @@ behind it rather than an opinion:
 - **Melodic** is `music.smoothing`, a low-pass on the firing rates before they
   are quantised to the scale. At the default 0.3 the lead voices move by a step
   (four semitones or fewer) 65% of the time and leap the rest; at 0.12 they step
-  70% of the time. Below about 0.08 the tune stops following the flight, which
-  is the point of the thing, so 0.12 is where `bright.yaml` sits. Lydian and a
-  root of D3 are the other half: the raised fourth is what makes the mode sound
-  like daylight.
+  70% of the time — and 77.9% after the arrangement has been through it, which
+  is the voice leading giving back more than the chord snapping took. Below
+  about 0.08 the tune stops following the flight, which is the point of the
+  thing, so 0.12 is where `bright.yaml` sits. Lydian and a root of D3 are the
+  other half: the raised fourth is what makes the mode sound like daylight.
 - **Elastic** is two mechanisms pulling together. `tempo_from: drive` puts the
   tempo on the wing-stroke neurons and `tempo_swing: 0.5` lets it move half
   again either way — over the rendered track, 0.225 to 0.675 cycles per second,
@@ -274,29 +360,62 @@ behind it rather than an opinion:
   and the notes stay the length they were.
 - **Bright** is `describe()`'s `centroid_hz`, the spectral centre of mass. Read
   it on its own scale: the same measure gives a 440 Hz sine 440 Hz, a 220 Hz
-  sawtooth 6.6 kHz, and white noise 11 kHz. The track measures **2.5 kHz**, with
-  20% of the magnitude above 4 kHz and 1.4% of the power below 120 Hz — the
-  master high-pass at 60 Hz, a separate 320 Hz high-pass on the reverb send so
-  the bass never enters the tail, and the high shelf are all there to keep that
-  last number small. The first mix had 9% down there and sounded like a room
-  rather than a sky.
+  sawtooth 6.6 kHz, and white noise 11 kHz. The track measures **3.6 kHz**, with
+  30% of the magnitude above 4 kHz. A third of that is the arrangement rather
+  than the synthesiser — the same flight rendered with `--arrange none` measures
+  2.5 kHz — because clearing the middle register is how a mix gets bright, and
+  more treble is not. See the band table below.
 
-`--shape arc` is the other half of the piece: it gives the conductor's gestures
-a beginning, a middle and an end, so the drone is left alone at the start,
-crowded in the middle and left alone again. It shows up as note counts per third
-of the rendered track — 376, 528, 430.
+Two more, once there is an arrangement and a master to measure:
+
+- **Composed**, in the sense that something changes. Seven sections with a
+  different cast in each; a dynamic arc that runs 0.22 → 0.39 → 0.22 in mean
+  velocity from the opening to the middle to the close; every pitched note on
+  the chord that is sounding, 1083 of 1083; and the fifteen minor seconds and
+  unisons the raw flight put between its voices reduced to none. The arrangement
+  does not cost the tune: the lead's stepwise motion goes *up*, from 70.0% to
+  77.9%, and its eleven octave leaps go to zero, because voice leading gives
+  back more than snapping onto chords takes away.
+- **Production-ready**, in the sense that it meets a delivery spec. −14.2 LUFS
+  integrated, −1.0 dBTP true peak, zero clipped samples, 24-bit/44.1 kHz, fades
+  at both ends. It is not squashed to get there: 10.5 LU between the quiet parts
+  and the loud ones, measured as the spread of six-second blocks.
+
+And the thing that is easiest to hear and hardest to argue with — where the
+energy sits, as a share of the total, with and without the arrangement:
+
+| band | `--arrange none` | arranged | |
+|---|---|---|---|
+| below 60 Hz | 0.1% | 0.0% | the master high-pass, in both |
+| 60–120 Hz | 1.4% | **18.5%** | a bass line, in its own register |
+| 120–250 Hz | 16.7% | 34.9% | |
+| 250–500 Hz | **58.7%** | 17.5% | everything at once, then not |
+| 500 Hz–1.2 kHz | 15.9% | 16.1% | |
+| above 1.2 kHz | 7.1% | 12.9% | |
+
+The unarranged mix has almost no bass and three fifths of its energy piled into
+one octave of low mid. That is what thirteen voices playing a scale in
+overlapping registers sounds like, and it is why the answer to "make it
+brighter" was an arrangement and not an EQ.
 
 ### The track in the repo
 
-[`assets/flight-track.mp3`](../assets/flight-track.mp3) is the command at the top
-of this section, seed 2. Every note in it is a spike: the melody is the two wing
-groups, the bass is `DNg02`, the bells are Kenyon cells firing as the fly
-recognises something, and the low FM hit at 21 seconds and again at 54 is the
-giant fibre deciding to escape — each one answered a tenth of a second later by
-the dopamine neuron a fourth above it, which is the sound of the mushroom body
-being told that whatever it just saw was worth escaping from.
+[`assets/flight-track.wav`](../assets/flight-track.wav) is the command at the top
+of this section, seed 2: 155 seconds, 24-bit, 41 MB. Every note in it is a
+spike. The melody is the two wing groups, the bass is `DNg02`, the bells are
+Kenyon cells firing as the fly recognises something, and the low hit at 21
+seconds and again at 54 is the giant fibre deciding to escape — each one
+answered a tenth of a second later by the dopamine neuron above it, which is the
+sound of the mushroom body being told that whatever it just saw was worth
+escaping from. Neither of them falls inside `escape`, the section written for
+them: both are more than 18% of the piece away from where the form puts it, so
+the form stayed where it was and the two hits play over `wings` and `current`
+instead.
 
-The `.wav` master is not committed: re-render it, it is deterministic.
+It is committed rather than regenerated because it is what this whole directory
+is for, and because 41 MB is the honest size of two and a half minutes of
+24-bit audio. Re-rendering gives the same file: same seed, same flight, same
+arrangement, same master.
 
 ## Configuration
 
@@ -354,10 +473,20 @@ flydrones fly --drone tello --send --music pd  # a real drone, in real time
   live SuperCollider here.
 - **The rendered track was checked by measurement, not by ear.** Nobody here has
   heard it. Every claim in *Melodic, elastic and bright* is a number a script
-  produced — stepwise-interval share, the tempo range, the spectral centroid, the
-  band balance, the peak and the clipped-sample count (zero) — and numbers are
-  not the same thing as it sounding good. If it does not, the settings that make
-  it are all in `configs/bright.yaml` and none of them touch the flight.
+  produced — stepwise-interval share, octave leaps, notes on the chord, the
+  tempo range, the spectral centroid, the band balance, the loudness, the true
+  peak and the clipped-sample count — and numbers are not the same thing as it
+  sounding good. The measurements say the piece has a bass register, a dynamic
+  arc and no dissonance it did not intend; they cannot say whether the tune is
+  any good. If it is not, the settings that make it are in
+  `configs/bright.yaml` and `music/arrange.py`, and none of them touch the
+  flight.
+- **The arrangement is a composer's hand, and it is ours, not the fly's.** The
+  form, the chords, the roles and the dynamics in `arrange.py` were written by
+  us the same way `defaults.yaml` was. What the fly still decides is every note
+  onset, every contour, the tempo and where the escape falls. `--arrange none`
+  renders without any of it, which is the only honest way to see what each of
+  us contributed.
 - **`compose` paces itself to the wall clock.** If the brain cannot keep up (a large
   MaleCNS core on a slow machine) it says so once and the music drags rather than
   skipping; `flydrones bench` tells you the real-time factor beforehand.

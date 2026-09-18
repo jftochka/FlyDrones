@@ -31,7 +31,6 @@ Nyquist per note, which is band-limiting for free: no aliasing, at any pitch.
 from __future__ import annotations
 
 import math
-import wave
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -411,18 +410,12 @@ def render(frames, cfg: dict | SynthConfig | None = None, seconds: float | None 
     return out.astype(np.float32)
 
 
-def write_wav(path: str | Path, audio: np.ndarray, sr: int = SR) -> Path:
-    """16-bit stereo, which anything will play."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = np.clip(audio.T, -1.0, 1.0)
-    pcm = (data * 32767.0).astype("<i2")
-    with wave.open(str(path), "wb") as f:
-        f.setnchannels(2)
-        f.setsampwidth(2)
-        f.setframerate(sr)
-        f.writeframes(pcm.tobytes())
-    return path
+def write_wav(path: str | Path, audio: np.ndarray, sr: int = SR, bits: int = 16) -> Path:
+    """16-bit stereo, which anything will play. The 24-bit master lives in
+    :func:`flydrones.music.master.write_wav`, which this is a thin alias for so
+    there is one piece of code that knows how a WAV is laid out."""
+    from .master import write_wav as _write
+    return _write(path, audio, sr, bits=bits)
 
 
 def describe(audio: np.ndarray, sr: int = SR) -> dict:

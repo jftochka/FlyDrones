@@ -596,30 +596,32 @@ def _copy_patches(out: Path) -> list[Path]:
 
 
 def _render_audio(args, frames) -> None:
-    """Render a flight to a WAV (or an MP3, if ffmpeg is about) and say what came out."""
-    import shutil
-    import subprocess
-
-    from .music.synth import SynthConfig, describe, render, write_wav
+    """Arrange the flight, synthesise it, master it, and write the WAV."""
+    from .music.arrange import FORMS, Arranger
+    from .music.master import master, write_wav
+    from .music.synth import SynthConfig, describe, render
 
     if not getattr(args, "render", None) or not frames:
         return
     cfg = _music_cfg(_cfg(args), args)
     out = Path(args.render)
-    wav = out.with_suffix(".wav")
+    if out.suffix.lower() != ".wav":
+        out = out.with_suffix(".wav")
+
+    form = getattr(args, "arrange", "none")
+    if form and form != "none":
+        arranger = Arranger(FORMS[form], seed=args.seed)
+        frames = arranger.apply(frames)
+        print(arranger.describe(seconds=max(f.t for f in frames) if frames else 0.0))
+
     audio = render(frames, cfg)
-    write_wav(wav, audio, SynthConfig.from_config(cfg).sample_rate)
-    d = describe(audio)
-    print(f"audio -> {wav} ({d['seconds']:.0f} s, peak {d['peak']:.2f}, {d['rms_dbfs']:.1f} dBFS RMS, "
+    sr = SynthConfig.from_config(cfg).sample_rate
+    audio, rep = master(audio, sr, target_lufs=args.lufs)
+    write_wav(out, audio, sr, bits=args.bits)
+    d = describe(audio, sr)
+    print(f"audio -> {out} ({d['seconds']:.0f} s, {args.bits}-bit/{sr / 1000:.1f} kHz, "
+          f"{rep['lufs']:.1f} LUFS, {rep['true_peak_dbtp']:.1f} dBTP, "
           f"centroid {d['centroid_hz']:.0f} Hz, width {d['width']:.2f})")
-    if out.suffix.lower() == ".mp3":
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
-            print(f"  (no ffmpeg on PATH, so it stayed a WAV: {wav})")
-            return
-        subprocess.run([ffmpeg, "-y", "-i", str(wav), "-codec:a", "libmp3lame", "-q:a", "3", str(out)],
-                       check=True, capture_output=True)
-        print(f"audio -> {out} ({out.stat().st_size / 1e6:.1f} MB)")
 
 
 def cmd_compose(args) -> int:
@@ -806,7 +808,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write the Pd and Max patches, the Strudel page and the Tidal file for this configuration")
     sp.add_argument("--replay", metavar="SCORE.jsonl", help="play a score saved with jsonl:FILE instead of flying")
     sp.add_argument("--render", metavar="TRACK.wav",
-                    help="render the flight to audio with the built-in synthesiser (.wav, or .mp3 with ffmpeg)")
+                    help="render the flight to a mastered WAV with the built-in synthesiser")
+    sp.add_argument("--arrange", default="daylight", metavar="FORM",
+                    help="the arrangement to render through: daylight, or none for the bare flight")
+    sp.add_argument("--lufs", type=float, default=-14.0,
+                    help="loudness target for the master (default -14 LUFS, what streaming normalises to)")
+    sp.add_argument("--bits", type=int, choices=[16, 24], default=24, help="WAV bit depth (default 24)")
     sp.set_defaults(func=cmd_compose)
 
     sp = sub.add_parser("link", help="watch an Orange LTE router: signal, round trip, and what a drone would do")
