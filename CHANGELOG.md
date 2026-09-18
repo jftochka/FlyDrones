@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+Cognition: MiniFly gains a mushroom body (visual projection neurons -> 360 Kenyon cells -> APL feedback
+inhibition -> MBON-g1pedc, with PPL1 dopamine depressing the Kenyon-cell synapses that were active when
+something hurt) and a central complex (an EPG ring with Delta7 inhibition, PEN shift cells driven by the
+halteres, FC2 goals and PFL3 steering). `flydrones learn --compare` flies ten approaches to the chair with
+and without the plasticity; `tools/bench_cognition.py` measures the lot. See [docs/COGNITION.md](docs/COGNITION.md).
+
 The fly brain drone compositor: `flydrones compose` turns spikes and flight into music and sends it to
 Pure Data, Max/MSP, TidalCycles, SuperDirt and Strudel (OSC, FUDI, `/ctrl`, `/dirt/play` and Server-Sent
 Events), places notes at the spike times inside each control tick, writes the flight out as Tidal or Strudel

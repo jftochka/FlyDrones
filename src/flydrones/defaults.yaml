@@ -23,6 +23,14 @@ brain:
   bias:
     DNg02_L: 9.0
     DNg02_R: 9.0
+    # The compass ring needs a tonic drive to hold a bump at all, the way an
+    # attractor needs energy. Without it EPG is silent and there is no heading.
+    # 9 mV against a 7 mV threshold: every column would fire, and Delta7
+    # inhibition is what leaves only one. The shift cells sit just under
+    # threshold so that they only speak when the halteres do.
+    EPG: 9.0
+    PEN_L: 5.5
+    PEN_R: 5.5
   record_neurons: 400      # neurons shown in the live spike raster
 
 # ---------------------------------------------------------------------------
@@ -48,6 +56,15 @@ inputs:
   LC4_R:   {types: ["^LC4$"], side: R, feature: loom_speed, eye: R, max_hz: 150}
   HAL_L:   {types: ["(?i)haltere"], side: L, feature: yaw_neg, max_hz: 50}
   HAL_R:   {types: ["(?i)haltere"], side: R, feature: yaw_pos, max_hz: 50}
+  # --- cognition (see docs/COGNITION.md). These carry vectors, not grids:
+  # a sparse code of what the eye is looking at, a punishment signal, and the
+  # goal direction held around the central-complex ring.
+  VPN_L:   {types: ["^VPN-MB$"], side: L, feature: scene_L, max_hz: 70}
+  VPN_R:   {types: ["^VPN-MB$"], side: R, feature: scene_R, max_hz: 70}
+  PPL1_L:  {types: ["^PPL1"], side: L, feature: punish, max_hz: 140}
+  PPL1_R:  {types: ["^PPL1"], side: R, feature: punish, max_hz: 140}
+  GOAL:    {types: ["^FC2$"], feature: goal, max_hz: 90}
+  EPG_SET: {types: ["^EPG$"], feature: compass_set, max_hz: 120}
 
 imu:
   yaw_saturation_dps: 150  # yaw rate that drives haltere inputs at max_hz
@@ -62,6 +79,24 @@ outputs:
   DNp03_R: {types: ["^DNp03$"], side: R, note: "looming-evoked flight saccades (Curr Biol 2025)"}
   DNp01_L: {types: ["^DNp01$", "^GF$"], side: L, note: "giant fiber, escape takeoff (Ache et al. 2019)"}
   DNp01_R: {types: ["^DNp01$", "^GF$"], side: R, note: "giant fiber, escape takeoff (Ache et al. 2019)"}
+  MBON_L:  {types: ["^MBON-g1"], side: L, note: "MBON-g1pedc: high = this scene is safe (Hige et al. 2015)"}
+  MBON_R:  {types: ["^MBON-g1"], side: R, note: "the same, right hemisphere"}
+
+# Groups that are only watched: they feed the telemetry, the compass and the
+# music, and nothing in the control path reads them.
+monitors:
+  KC_L:    {types: ["^KCg-d$"], side: L, note: "visual Kenyon cells: the sparse code of the scene"}
+  KC_R:    {types: ["^KCg-d$"], side: R}
+  APL_L:   {types: ["^APL$"], side: L, note: "feedback inhibition that keeps the KC code sparse"}
+  APL_R:   {types: ["^APL$"], side: R}
+  EPG:     {types: ["^EPG$"], note: "the heading bump"}
+  FC2m:    {types: ["^FC2$"], note: "the goal column"}
+  PEN_L:   {types: ["^PEN$"], side: L, note: "the shift cells that carry the bump around"}
+  PEN_R:   {types: ["^PEN$"], side: R}
+  PFL3_L:  {types: ["^PFL3$"], side: L, note: "steering: heading compared against goal"}
+  PFL3_R:  {types: ["^PFL3$"], side: R}
+  TURN_L:  {types: ["^LAL-turn$"], side: L, note: "the learned avoidance turn, held off by the MBON"}
+  TURN_R:  {types: ["^LAL-turn$"], side: R}
 
 vision:
   width: 96                # camera frame is resized to this before encoding
@@ -120,6 +155,29 @@ safety:
   min_battery_pct: 20      # land below this
   max_flight_s: 180
 
+# ---------------------------------------------------------------------------
+# Cognition: the mushroom-body memory and the central-complex compass.
+# docs/COGNITION.md explains what is biology and what is engineering here.
+# ---------------------------------------------------------------------------
+cognition:
+  enabled: true
+  columns: 16              # central-complex columns: 22.5 degrees each
+  scene_keep: 0.45         # fraction of eye cells kept in the code the KCs see
+  scene_gain: 1.6          # contrast -> drive
+  compass_seed_s: 0.6      # how long the bump is planted for at the start of a flight
+  compass_seed_column: 0   # "straight ahead at take-off" is this column
+  goal_width: 1.2          # columns; how sharp the goal is
+  punish_decay_s: 0.35     # dopamine is a pulse, not a mood
+  collision_punishment: 1.0
+  punish_on_escape: 0.8   # a near miss teaches as well, at a lower dose
+  mushroom_body:
+    enabled: true
+    learning_rate: 0.55    # depression per second of full dopamine and full KC rate
+    forget_s: 300          # a depressed synapse creeps back to where it started
+    floor: 0.08            # and never goes below this fraction of it
+    dan_ref_hz: 60         # dopamine rate that counts as a full punishment
+    kc_ref_hz: 25          # Kenyon-cell rate that counts as fully active
+
 control:
   hz: 20
   takeoff: true
@@ -147,9 +205,11 @@ music:
   # Voice sound names are generic; each target maps them to something it has.
   sounds:
     superdirt: {flybass: supersaw, flylead: superpwm, flyperc: superhat,
-                flycrash: superhoover, flyloom: supersquare, flyair: supersine}
+                flycrash: superhoover, flyloom: supersquare, flyair: supersine,
+                flyspark: superhat, flysting: superzow, flyturn: superpwm}
     strudel:   {flybass: sawtooth, flylead: triangle, flyperc: square,
-                flycrash: sawtooth, flyloom: square, flyair: sine}
+                flycrash: sawtooth, flyloom: square, flyair: sine,
+                flyspark: triangle, flysting: sawtooth, flyturn: square}
   voices:
     lift:
       groups: {DNg02_L: 0.5, DNg02_R: 0.5}
@@ -279,6 +339,77 @@ music:
       pan: 0.35
       orbit: 5
       channel: 5
+    # --- the cognitive voices. The fly is not only reacting now.
+    kenyon:
+      groups: {KC_L: 0.5, KC_R: 0.5}
+      note: "the sparse code of whatever the fly is looking at: a few cells in a few hundred"
+      sound: flyspark
+      mode: repeat
+      absolute: true         # the Kenyon cells idle at nothing; the raw rate is the signal
+      on_hz: 1.0
+      off_hz: 0.4
+      span_hz: 5
+      low: 84
+      high: 103
+      every_s: 0.35
+      fastest_s: 0.12
+      duration: 0.08
+      gain: 0.5
+      pan: 0.5
+      orbit: 6
+      channel: 7
+    memory:
+      groups: {MBON_L: 0.5, MBON_R: 0.5}
+      note: "MBON-g1pedc letting go: this voice is the sound of having learned something"
+      sound: flyturn
+      mode: repeat
+      rectify: neg           # it speaks when the MBON falls *below* its resting rate
+      on_hz: 6
+      off_hz: 3
+      span_hz: 30
+      low: 43
+      high: 67
+      every_s: 0.9
+      fastest_s: 0.4
+      duration: 0.8
+      gain: 0.7
+      pan: 0.45
+      orbit: 7
+      channel: 8
+    dopamine:
+      groups: {PPL1_L: 0.5, PPL1_R: 0.5}
+      note: "PPL1: the moment something hurt. One note per lesson"
+      sound: flysting
+      mode: trigger
+      on_hz: 20
+      off_hz: 8
+      span_hz: 100
+      low: 31
+      high: 55
+      min_gap_s: 0.4
+      duration: 0.9
+      gain: 1.0
+      pan: 0.5
+      orbit: 3
+      channel: 10
+    avoid:
+      groups: {TURN_L: 0.5, TURN_R: 0.5}
+      note: "the learned turn, once the MBON lets go of it"
+      sound: flyturn
+      mode: repeat
+      absolute: true
+      on_hz: 2.5
+      off_hz: 1.0
+      span_hz: 10
+      low: 55
+      high: 79
+      every_s: 0.3
+      fastest_s: 0.12
+      duration: 0.25
+      gain: 0.85
+      pan: 0.55
+      orbit: 7
+      channel: 9
     falling:
       groups: {T4d_L: 0.5, T4d_R: 0.5}
       note: "downward optic flow (the world rising): the same texture, lower"

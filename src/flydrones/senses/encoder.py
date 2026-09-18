@@ -43,7 +43,14 @@ class InputEncoder:
                 rates[name] = np.full(idx.size, max_hz * np.clip(val / self.yaw_gain_dps, 0, 1), np.float32)
                 continue
             if extra and feat in extra:
-                rates[name] = np.full(idx.size, max_hz * float(np.clip(extra[feat], 0, 1)), np.float32)
+                # A scalar drives the whole group; a vector (a scene code, a goal
+                # around the ring) is spread over it the same way a grid is.
+                arr = np.asarray(extra[feat], dtype=np.float32).reshape(-1)
+                if arr.size <= 1:
+                    v = float(arr[0]) if arr.size else 0.0
+                    rates[name] = np.full(idx.size, max_hz * min(1.0, max(0.0, v)), np.float32)
+                else:
+                    rates[name] = (max_hz * np.clip(arr, 0, 1)[self._cells(name, arr.size)]).astype(np.float32)
                 continue
             if vision is None:
                 continue

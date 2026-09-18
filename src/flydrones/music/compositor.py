@@ -68,7 +68,8 @@ class VoiceSpec:
     orbit: int = 0
     channel: int = 1
     gain: float = 0.9
-    rectify: str = "pos"  # pos = only excitation above rest, abs = either direction
+    rectify: str = "pos"  # pos = above rest, neg = below rest, abs = either direction
+    absolute: bool = False  # read the raw rate instead of the distance from rest
     note: str = ""  # what this voice is, for the docs and the patches
 
     @staticmethod
@@ -99,8 +100,21 @@ class Voice:
         self.notes = 0
 
     def excitation(self, rates: dict[str, float], baselines: dict[str, float]) -> float:
-        x = sum(w * (_num(rates.get(g)) - _num(baselines.get(g))) for g, w in self.spec.groups.items())
-        return abs(x) if self.spec.rectify == "abs" else max(0.0, x)
+        """How excited this voice is, in Hz.
+
+        Most voices measure the distance from the resting rate, which is what
+        makes one score work on two brains. Two kinds do not: a voice reading a
+        group that idles near zero anyway (the Kenyon cells) wants the raw rate,
+        and a voice that is about something *stopping* — the MBON letting go of
+        a scene it has learned — wants the distance below rest.
+        """
+        base = {} if self.spec.absolute else baselines
+        x = sum(w * (_num(rates.get(g)) - _num(base.get(g))) for g, w in self.spec.groups.items())
+        if self.spec.rectify == "abs":
+            return abs(x)
+        if self.spec.rectify == "neg":
+            return max(0.0, -x)
+        return max(0.0, x)
 
     def update(self, t: float, rates: dict[str, float], baselines: dict[str, float], onset_t: float | None = None):
         s = self.spec
@@ -250,6 +264,20 @@ class Compositor:
             "cycle": self.cycle,
             "cps": self.cps,
         }
+        cog = getattr(info, "cognition", None)
+        if cog is not None:
+            # What the fly knows, as numbers a pattern can use: the memory grows,
+            # the heading turns, and both are as much part of the piece as the flight.
+            heading = _num(cog.heading_deg)
+            c.update({
+                "memory": _clamp01(_num(cog.memory)),
+                "heading": _clamp01((heading % 360.0) / 360.0),
+                "heading_hold": _clamp01(_num(cog.heading_strength)),
+                "dopamine": _clamp01(_num(cog.dopamine_hz) / 60.0),
+                "mbon": _clamp01(_num(cog.mbon_hz) / 50.0),
+                "kc": _clamp01(_num(cog.kc_active) * 5.0),
+                "goal": -1.0 if cog.goal_deg is None else _clamp01(_num(cog.goal_deg) / 360.0),
+            })
         return [ControlEvent(t=t, name=k, value=round(float(v), 5)) for k, v in c.items()]
 
     # ------------------------------------------------------------------- public

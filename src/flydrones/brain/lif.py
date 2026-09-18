@@ -147,6 +147,42 @@ class LIFNetwork:
         """Directly add ``mv`` to the synaptic conductance of neurons (current pulse)."""
         self.g[np.asarray(idx, dtype=np.int64)] += np.float32(mv)
 
+    # -------------------------------------------------------------- plasticity
+    def synapses_between(self, pre: np.ndarray, post: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Positions of the pre -> post synapses in the weight arrays.
+
+        Returns ``(positions, presynaptic_neuron_per_position)``. The matrix is
+        held column-compressed by presynaptic neuron, so a learning rule that
+        depends on which presynaptic cell was active can be written as one
+        vectorised multiply over these positions.
+        """
+        post_set = np.zeros(self.n, dtype=bool)
+        post_set[np.asarray(post, dtype=np.int64)] = True
+        pos, owner = [], []
+        for j in np.asarray(pre, dtype=np.int64):
+            lo, hi = self._indptr[j], self._indptr[j + 1]
+            sel = np.flatnonzero(post_set[self._indices[lo:hi]]) + lo
+            if sel.size:
+                pos.append(sel)
+                owner.append(np.full(sel.size, j, dtype=np.int64))
+        if not pos:
+            return np.zeros(0, np.int64), np.zeros(0, np.int64)
+        return np.concatenate(pos), np.concatenate(owner)
+
+    def set_synapses(self, positions: np.ndarray, weights: np.ndarray) -> None:
+        """Write signed synapse counts at those positions (both copies of them).
+
+        ``W`` is used for the dense propagation path and ``_data`` for the
+        sparse one, so a rule that touches only one of them works until the
+        network gets busy and then quietly stops working.
+        """
+        w = np.asarray(weights, dtype=np.float32)
+        self.W.data[positions] = w
+        self._data[positions] = w * np.float32(self.p.w_syn)
+
+    def get_synapses(self, positions: np.ndarray) -> np.ndarray:
+        return self.W.data[positions].copy()
+
     # ------------------------------------------------------------------ core
     def _propagate(self, spk: np.ndarray) -> np.ndarray | None:
         starts = self._indptr[spk]

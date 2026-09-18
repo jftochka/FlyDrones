@@ -14,6 +14,7 @@ This is the long version of the README, step by step, from zero to a drone in th
 - [8. Record a video for social media](#8-record-a-video-for-social-media)
 - [9. Tuning cheat-sheet](#9-tuning-cheat-sheet)
 - [10. Make it play music](#10-make-it-play-music)
+- [11. Teach it something](#11-teach-it-something)
 
 ## Try it in the browser first
 
@@ -195,3 +196,15 @@ The same flight, read out as notes instead of stick commands: DNg02 becomes the 
 percussion, the giant fiber the crash. It speaks OSC to Pure Data and Max/MSP, `/ctrl` to TidalCycles,
 `/dirt/play` to SuperDirt and Server-Sent Events to a Strudel page in your browser, and
 `--score flight.tidal` writes the flight down as mini-notation. Full documentation: [MUSIC.md](MUSIC.md).
+
+## 11. Teach it something
+
+```bash
+flydrones learn --compare
+```
+
+Ten approaches to the chair with the mushroom body learning, then ten with the plasticity switched off. The
+first fly ends up keeping nearly two metres away from something it has only seen; the second is still
+dodging at the last moment. Nothing about the flight code changes between them — a few hundred synapses do.
+The same brain also carries a compass: `pilot.cognition.set_goal(90)` and it turns until its own heading
+estimate says 90 degrees. Full write-up: [COGNITION.md](COGNITION.md).

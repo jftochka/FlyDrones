@@ -42,6 +42,15 @@ result is rhythm rather than a buzz.
 | `giant_fiber` | DNp01 L+R | the escape reflex | one enormous note, then nothing for half a second |
 | `loom` | LPLC2, LC4 | approach detectors | a riser that exists only while something is coming at the drone |
 | `rising` / `falling` | T4c, T4d | up / down optic flow | high texture; which one plays says which way the world is moving |
+| `kenyon` | KCg-d | the sparse code of the scene | a few high sparkles: what the fly is looking at |
+| `memory` | MBON-g1pedc | holds the avoidance turn off | it plays when the MBON *lets go* — the sound of having learned |
+| `dopamine` | PPL1 | punishment | one note per lesson |
+| `avoid` | LAL-turn | the learned turn | it did not exist on the first lap, and it takes over the piece by the tenth |
+
+Two voices read their group differently, because their signal is not excitement: `kenyon` reads the raw
+rate (Kenyon cells idle at nothing, so the distance from rest says little), and `memory` reads the distance
+*below* rest, which is what learning looks like from outside. `absolute: true` and `rectify: neg` in the
+voice, both documented in `defaults.yaml`.
 
 Pitch is the firing rate above rest, quantised into a scale
 (`--scale minor_pentatonic --root C3` by default; every name in
@@ -60,6 +69,10 @@ Alongside the notes, every tick carries continuous controls:
 | `escape` | 0 or 1 | the giant-fiber reflex is active |
 | `battery` | 0..1 | pack remaining |
 | `spikes` | kHz | spikes per second across the recorded neurons |
+| `memory` | 0..1 | how much of the KC→MBON weight the fly has given up |
+| `heading`, `heading_hold` | 0..1 | where the compass bump is, and how sharp it is |
+| `goal` | 0..1, -1 for none | the heading it is steering to |
+| `mbon`, `kc`, `dopamine` | 0..1 | the mushroom body's three signals |
 | `cycle`, `cps` | | where the compositor thinks the cycle is |
 
 and a `section` — `ground`, `hover`, `climb`, `descend`, `turn`, `escape` — which is

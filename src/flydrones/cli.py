@@ -258,6 +258,34 @@ def cmd_inspect(args) -> int:
     return 0
 
 
+def cmd_learn(args) -> int:
+    """Fly at the chair until the fly has had enough of it."""
+    from .learn import approach_laps, summarise
+
+    print(BANNER)
+    cfg = _cfg(args)
+    _brain(cfg)  # print the connectome summary once, before the laps
+    runs = [("learning", True), ("no learning (control)", False)] if args.compare else [("learning", not args.no_learning)]
+    summaries = {}
+    for label, learning in runs:
+        print(f"\n--- {label} ---")
+        laps = approach_laps(cfg, laps=args.laps, learning=learning, seed=args.seed,
+                             on_lap=lambda lap, _p: print("  " + lap.line()))
+        s = summaries[label] = summarise(laps)
+        print(f"  closest approach {s['closest_first_m']:.2f} m -> {s['closest_last_m']:.2f} m"
+              f" | collisions {s['collisions_first']} -> {s['collisions_last']}"
+              f" | MBON {s['mbon_first_hz']:.1f} Hz -> {s['mbon_last_hz']:.1f} Hz"
+              f" | avoidance turn {s['turn_first_hz']:.1f} Hz -> {s['turn_last_hz']:.1f} Hz"
+              f" | memory {s['memory']:.2f}")
+        if args.csv:
+            _write_log(args.csv if len(runs) == 1 else f"{label.split()[0]}-{args.csv}", [lap.as_dict() for lap in laps])
+    if args.compare:
+        a, b = summaries["learning"], summaries["no learning (control)"]
+        print(f"\nthe same brain, the same room, the same seed: {a['closest_last_m']:.2f} m of clearance with the"
+              f" mushroom body learning, {b['closest_last_m']:.2f} m without it.")
+    return 0
+
+
 def cmd_calibrate(args) -> int:
     from .calibrate import calibrate
 
@@ -571,6 +599,16 @@ def build_parser() -> argparse.ArgumentParser:
     common(sp)
     sp.add_argument("--hz", type=float, default=100)
     sp.set_defaults(func=cmd_inspect)
+
+    sp = sub.add_parser("learn", help="watch the mushroom body learn to avoid the chair")
+    common(sp)
+    sp.add_argument("--laps", type=int, default=10, help="approaches to fly")
+    sp.add_argument("--seed", type=int, default=0)
+    sp.add_argument("--no-learning", action="store_true", dest="no_learning",
+                    help="same flight with the plasticity switched off")
+    sp.add_argument("--compare", action="store_true", help="fly it both ways and print the two side by side")
+    sp.add_argument("--csv", help="write the laps to a CSV")
+    sp.set_defaults(func=cmd_learn)
 
     sp = sub.add_parser("calibrate", help="fit the descending-neuron read-out for this brain")
     common(sp)

@@ -187,7 +187,8 @@ def test_every_configured_voice_listens_to_a_group_the_brain_has():
     for voice in comp.voices:
         assert voice.spec.groups, voice.spec.name
         for group in voice.spec.groups:
-            assert group in c["inputs"] or group in c["outputs"], f"{voice.spec.name}: {group}"
+            known = {**c["inputs"], **c["outputs"], **c.get("monitors", {})}
+            assert group in known, f"{voice.spec.name}: {group}"
             assert brain.connectome.group(group).size > 0, group
 
 

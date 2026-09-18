@@ -34,17 +34,25 @@ class Brain:
         bcfg = cfg.get("brain", {})
         self.input_specs = {k: GroupSpec.from_dict(k, v) for k, v in cfg.get("inputs", {}).items()}
         self.output_specs = {k: GroupSpec.from_dict(k, v) for k, v in cfg.get("outputs", {}).items()}
+        # Monitors are groups we only want to watch: the Kenyon cells, the compass
+        # ring, the inhibitor that keeps them sparse. Nothing drives them and
+        # nothing reads them as a command, but their rates come back every tick.
+        self.monitor_specs = {k: GroupSpec.from_dict(k, v) for k, v in cfg.get("monitors", {}).items()}
+        for s in self.monitor_specs.values():
+            s.role = "monitor"
         for s in self.input_specs.values():
             s.role = "input"
         for s in self.output_specs.values():
             s.role = "output"
 
-        connectome.resolve_groups({**self.input_specs, **self.output_specs})  # always follow the current config
+        connectome.resolve_groups({**self.input_specs, **self.output_specs, **self.monitor_specs})
         connectome.meta.setdefault("roles", {})
         connectome.meta["roles"].update({k: "input" for k in self.input_specs})
         connectome.meta["roles"].update({k: "output" for k in self.output_specs})
+        connectome.meta["roles"].update({k: "monitor" for k in self.monitor_specs})
 
-        self.empty = [k for k in {**self.input_specs, **self.output_specs} if connectome.group(k).size == 0]
+        self.empty = [k for k in {**self.input_specs, **self.output_specs, **self.monitor_specs}
+                      if connectome.group(k).size == 0]
         if self.empty:
             warnings.warn(f"groups with no matching neurons in {connectome.name}: {', '.join(self.empty)}", stacklevel=2)
 
@@ -96,7 +104,7 @@ class Brain:
         self.realtime_factor = (ms / 1000.0) / wall if wall > 0 else float("inf")
         self.last_raster = raster
         rates = {}
-        for name in list(self.output_specs) + list(self.input_specs):
+        for name in list(self.output_specs) + list(self.input_specs) + list(self.monitor_specs):
             idx = self.connectome.group(name)
             rates[name] = float(counts[idx].mean() * 1000.0 / ms) if idx.size else 0.0
         self.last_rates = rates

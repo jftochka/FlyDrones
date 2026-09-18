@@ -14,8 +14,10 @@
 - [ ] Record/replay: rerun a flight log through a different brain
 
 ## 0.3
+- [ ] Anchor the compass to a landmark (ER ring neurons), and path integration (PFN) for a home vector
+- [ ] Reward learning (PAM) alongside punishment, and a second MBON with the opposite valence
 - [ ] PyTorch / CUDA backend, full MaleCNS in real time on a laptop GPU
-- [ ] Dopamine (PPL1) punishment on collisions, KC→MBON plasticity
+- [x] Dopamine (PPL1) punishment on collisions, KC→MBON plasticity (MiniFly; MaleCNS groups resolve by name)
 - [ ] Drive early vision (L1-L3, Mi1, Tm3) from pixels instead of software optic flow
 
 ## Later

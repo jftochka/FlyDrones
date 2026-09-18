@@ -13,7 +13,10 @@ All of that is open in this repo.
 So anyone can run the demo in seconds without a 1.2 GB download. Two commands switch to MaleCNS.
 
 **Does it learn?**
-Not yet. The connectome weights are fixed. Dopamine-based plasticity (as in DOOMFLY) is on the roadmap.
+Yes, in the mushroom body. The connectome's wiring is fixed, but the Kenyon-cell synapses onto MBON-g1pedc
+are depressed by PPL1 dopamine when something hurts, which is the fly's own rule. After ten approaches to
+the chair it keeps 1.8 m away instead of 0.2 m. [COGNITION.md](COGNITION.md) has the measurements, and
+`flydrones learn --compare` flies it with the plasticity on and off.
 
 **It plays music?**
 `flydrones compose` is a second read-out of the same neurons: descending-neuron bursts become notes, the

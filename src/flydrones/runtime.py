@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .brain import Brain
+from .brain.cognition import Cognition, CognitiveState
 from .drones.base import Drone
 from .drones.sim import SimDrone
 from .motor import FlightCommand, MotorDecoder
@@ -30,6 +31,7 @@ class TickInfo:
     rtf: float = float("nan")
     spikes: int = 0
     brain_ms: float = 0.0  # brain clock at the end of this tick
+    cognition: CognitiveState | None = None  # what the memory and the compass say
 
 
 class Pilot:
@@ -47,8 +49,11 @@ class Pilot:
         self.decoder = MotorDecoder(cfg)
         self.safety = SafetyGovernor(cfg)
         self.illusion = GestureIllusion()
+        self.cognition = Cognition(brain, cfg) if cfg.get("cognition", {}).get("enabled", True) else None
         self.history: list[dict] = []
         self._t0 = None
+        self._collisions = 0
+        self._escaping = False
 
     def warmup(self, seconds: float, dt: float = 0.05) -> None:
         """Let the brain settle on the ground (still scene) and measure resting rates."""
@@ -58,8 +63,11 @@ class Pilot:
         while t < 0:
             frame = self.drone.frame() if self.drone.has_camera else None
             vision = self.retina.encode(frame)
-            inputs = self.encoder.encode(vision, 0.0)
+            extra = self.cognition.extra(vision, dt) if self.cognition else None
+            inputs = self.encoder.encode(vision, 0.0, extra=extra)
             rates = self.brain.tick(inputs, ms=dt * 1000.0)
+            if self.cognition:  # the compass bump is planted while the quad is still on the ground
+                self.cognition.update(self.brain.last_counts, dt * 1000.0, rates)
             self.decoder.update(rates, dt)
             t += dt
         self.drone.send(_FC.hover("warmup done"))
@@ -73,19 +81,38 @@ class Pilot:
             g = self.gestures.read(t, cam)
             vision = self.illusion.apply(vision, g, t)
         tel = self.drone.telemetry()
-        inputs = self.encoder.encode(vision, tel.yaw_rate_dps)
+        hits = int(getattr(self.drone, "collisions", 0))
+        if self.cognition is not None:
+            if hits > self._collisions:  # something hurt: dopamine, and the scene it happened in
+                self.cognition.punish(float(self.cfg.get("cognition", {}).get("collision_punishment", 1.0)))
+            extra = self.cognition.extra(vision, dt)
+        else:
+            extra = None
+        self._collisions = hits
+        inputs = self.encoder.encode(vision, tel.yaw_rate_dps, extra=extra)
         rates = self.brain.tick(inputs, ms=dt * 1000.0)
+        cog = self.cognition.update(self.brain.last_counts, dt * 1000.0, rates) if self.cognition else None
         raw = self.decoder.update(rates, dt)
+        if self.cognition is not None:
+            # A near miss teaches too. The giant fiber firing is the fly's own
+            # report that something was about to hit it, and PPL1 dopaminergic
+            # neurons carry threat as well as contact — so the escape is worth a
+            # smaller dose of dopamine than a collision. Engineered, not measured
+            # from a fly: cognition.punish_on_escape turns it off.
+            if raw.escape and not self._escaping:
+                self.cognition.punish(float(self.cfg.get("cognition", {}).get("punish_on_escape", 0.0)))
+            self._escaping = bool(raw.escape)
         cmd = self.safety.filter(raw, tel, dt)
         if self.safety.land_requested:
             self.drone.land()
         else:
             self.drone.send(cmd)
-        self.history.append({"t": t, "alt": tel.alt_m, "x": tel.x_m, "y": tel.y_m, "yaw": tel.yaw_deg, **{f"cmd_{k}": getattr(cmd, k) for k in ("throttle", "yaw", "forward")},
+        self.history.append({"t": t, "alt": tel.alt_m, "x": tel.x_m, "y": tel.y_m, "yaw": tel.yaw_deg,
+                             **({"heading": cog.heading_deg, "memory": cog.memory, "mbon": cog.mbon_hz} if cog else {}), **{f"cmd_{k}": getattr(cmd, k) for k in ("throttle", "yaw", "forward")},
                              "escape": cmd.escape, **{f"hz_{k}": v for k, v in rates.items() if k.startswith("DN")}})
         return TickInfo(t, cam if cam is not None else frame, rates, raw, cmd, tel, g, self.illusion.mode if g is not None else "camera",
                         self.brain.last_raster, self.brain.realtime_factor, int(self.brain.last_counts.sum()),
-                        self.brain.net.t_ms)
+                        self.brain.net.t_ms, cog)
 
 
 def run_sim(pilots: list[Pilot], seconds: float, hz: float = 20.0, on_tick=None, physics_substeps: int = 4) -> list[list[TickInfo]]:

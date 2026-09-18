@@ -57,6 +57,15 @@ except `terms` blocks, which replace.
 - **New drone:** subclass `Drone` ([HARDWARE.md](HARDWARE.md#your-own-drone)).
 - **New connectome** (FlyWire, BANC...): produce a `Connectome` with `weights`, `types`, `sides` and save it.
 
+## Cognition
+
+`brain/cognition.py` runs beside the reflex path: it builds the sparse scene code the mushroom body sees,
+applies the one plastic rule (dopamine-gated depression of KC→MBON, through `LIFNetwork.synapses_between`
+and `set_synapses`), reads the heading bump out of the EPG columns and turns a goal into a bump of drive on
+FC2. `Pilot` feeds it the collision and escape events that count as punishment. Neither circuit is a
+controller: both act through DNp03 and DNg02, and the safety governor still has the last word.
+See [COGNITION.md](COGNITION.md).
+
 ## Music
 
 `music/` is a second read-out of the same tick, running beside the flight one: a `Compositor` turns group

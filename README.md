@@ -137,6 +137,27 @@ The simulator is event-driven: each step only touches the synapses of neurons th
 
 Hand tracking uses MediaPipe if installed (`pip install -e ".[gestures]"`), otherwise an OpenCV skin-colour detector.
 
+## It learns, and it knows which way it is facing
+
+<p align="center"><b>mushroom body · central complex</b></p>
+
+The reflex fly never remembers anything: the one that flew into the chair ten times arrives at the eleventh just as fast. Two more circuits from the same connectome change that.
+
+```bash
+flydrones learn --compare        # ten approaches to the chair, with and without learning
+```
+
+| | naive fly | after ten approaches |
+|---|---|---|
+| closest approach to the chair | 0.24 m | **1.78 m** |
+| MBON-g1pedc (holds the turn off) | 41 Hz | **7.8 Hz** |
+| the avoidance turn | 0.4 Hz | **6.4 Hz** |
+| last-moment escapes | nearly every lap | none after the second |
+
+A sparse code of what the eye sees lands on **360 Kenyon cells**; **APL** keeps about a tenth of them firing; **MBON-g1pedc** reads them and, being GABAergic, holds an avoidance turn *off*. When something hurts, **PPL1** dopamine depresses exactly the Kenyon-cell synapses that were active — so that view, and no other, stops holding the turn back. With `--no-learning` the same brain in the same room still dodges at the last moment on lap ten.
+
+Alongside it, a ring of **EPG** columns holds a heading: **Delta7** inhibition leaves a single bump, **PEN** cells driven by the halteres push it round as the body turns (0.0°/s of drift while hovering), and **PFL3** steers until the bump lines up with a goal held by **FC2** — so `set_goal(90)` makes the fly turn and hold a course it worked out itself. Full write-up, with every number measured: **[docs/COGNITION.md](docs/COGNITION.md)**.
+
 ## Play it: the fly brain drone compositor
 
 <p align="center"><b>Pure Data · Max/MSP · TidalCycles · Strudel</b></p>
@@ -206,7 +227,7 @@ fly-3  hand dropped     -> descends to the 0.3 m safety floor and holds
 
 | brain | neurons | connections | speed (2-vCPU cloud VM, numpy) |
 |---|---|---|---|
-| MiniFly (synthetic) | 850 | 4,928 | 6-11× real time with camera + dashboard |
+| MiniFly (synthetic) | 1,584 | 17,544 | 15× real time on its own, 4-6× with camera and learning |
 | same size as MaleCNS (random graph benchmark) | 166,700 | 25.6 M | 0.62× real time, dt = 0.5 ms |
 
 A desktop CPU is faster. The control loop adapts `dt` to wall time and warns if the brain falls behind. Use `--core-hops` or run on a faster machine for real-time full-brain flight. Measure yours with `flydrones bench --brain ...`.
@@ -216,12 +237,14 @@ A desktop CPU is faster. The control loop adapts `dt` to wall time and warns if 
 ```
 src/flydrones/
   brain/       connectome.py (MaleCNS loader, groups, subgraphs) · lif.py (simulator) · synthetic.py (MiniFly)
+               cognition.py (mushroom-body learning, the compass, the scene code)
   senses/      retina.py (optic flow, looming) · gestures.py (hand -> illusions) · encoder.py · webcam.py
   motor/       decoder.py (descending neurons -> commands) · command.py
   drones/      sim.py · tello.py · crazyflie.py · mavlink.py · udp_bridge.py (ESP32/MSP)
   safety.py    limits, ceiling, floor, geofence, watchdog, battery
   runtime.py   the closed loop
   calibrate.py fit the read-out on your connectome
+  learn.py     the learning experiment: approaches to the chair, with and without plasticity
   music/       compositor.py (neurons -> notes) · sinks.py (Pd, Max, Tidal, SuperDirt, Strudel) · osc.py
                patterns.py (mini-notation) · server.py (SSE) · patches/ · web/ (the Strudel page)
   viz/         live dashboard and GIF recorder
