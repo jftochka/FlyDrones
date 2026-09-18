@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+3D flight replay: `--track` on `learn`, `radio` and `demo` writes a flight down, `docs/live/replay.html`
+draws it in the 3D bedroom (path coloured by what the fly had learned, event markers, compass needle,
+chase and drone cameras), and `tools/record_flight_3d.py` records that page to a GIF or an MP4 without a
+GPU. See [docs/REPLAY.md](docs/REPLAY.md).
+
 Radio Cognitive Fruit Fly (`flydrones radio`): an always-on station with a six-show programme, a front page
 that shows the heading needle, the memory bar and a live station log, pack swaps and recovery so the fly
 never lands for good, and the same `--to` targets as the compositor. See [docs/RADIO.md](docs/RADIO.md).

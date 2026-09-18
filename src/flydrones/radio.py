@@ -121,6 +121,7 @@ class Station:
         self._lap_started = 0.0
         self._goal_at = -1e9
         self._started = False
+        self.last_info = None  # the most recent tick, for anything recording the flight
 
     # ------------------------------------------------------------------ setup
     @staticmethod
@@ -278,6 +279,7 @@ class Station:
         info = self.pilot.tick(self.t, self.dt)
         for _ in range(4):
             self.pilot.drone.step(self.dt / 4)
+        self.last_info = info
         self._watch(info)
         frame = self.compositor.tick(info)
         self.sinks.set_context(self.context())

@@ -70,6 +70,13 @@ def cmd_demo(args) -> int:
     pilot = Pilot(brain, SimDrone(start=(-1.5, 0.0, 0.0)), cfg, gestures=ScriptedGestures(demo_timeline()))
     dash = Dashboard(brain, [pilot], title="FlyDrones · hand -> fly eyes -> fly brain -> drone")
     music = _MusicTap(_music_cfg(cfg, args), brain, pilot, args.music) if args.music else None
+    track = narrator = None
+    if args.track:
+        from .track import FlightNarrator, TrackRecorder
+
+        track = TrackRecorder(title="Hand, fly eyes, fly brain, drone",
+                              subtitle="the scripted demonstration, in the room it was flown in")
+        narrator = FlightNarrator(track)
     frames: list = []
     if args.live:
         _record_or_show.window = LiveWindow()
@@ -83,6 +90,10 @@ def cmd_demo(args) -> int:
             last_label[0] = label
         if music:
             music(i)
+        if track is not None:
+            if i.illusion != last_label[0] and i.gesture is not None:
+                track.chapter(i.t, i.illusion, "")
+            track.add(i, hit=narrator.watch(i, pilot.drone))
         _record_or_show(dash, frames, infos, args, k)
 
     try:
@@ -92,6 +103,9 @@ def cmd_demo(args) -> int:
     finally:
         if music:
             music.close()
+    if track is not None:
+        track.save(args.track)
+        print(f"track -> {args.track} ({track.summary()})")
     print(f"collisions: {pilot.drone.collisions}")
     if args.record and frames:
         save_gif(frames, args.record, fps=int(cfg["control"]["hz"] / max(1, args.every)))
@@ -267,10 +281,28 @@ def cmd_learn(args) -> int:
     _brain(cfg)  # print the connectome summary once, before the laps
     runs = [("learning", True), ("no learning (control)", False)] if args.compare else [("learning", not args.no_learning)]
     summaries = {}
+    track = narrator = None
+    if args.track:
+        from .track import FlightNarrator, TrackRecorder
+
+        track = TrackRecorder(title="Learning to avoid the chair",
+                              subtitle=f"{args.laps} approaches · the mushroom body is learning")
+        narrator = FlightNarrator(track)
+    seen_lap = [0]
+
+    def on_tick(pilot, info, lap):
+        if lap != seen_lap[0]:
+            seen_lap[0] = lap
+            track.chapter(info.t, f"approach {lap}",
+                          f"memory {pilot.cognition.state.memory:.2f}" if pilot.cognition else "")
+        hit = narrator.watch(info, pilot.drone)
+        track.add(info, hit=hit)
+
     for label, learning in runs:
         print(f"\n--- {label} ---")
         laps = approach_laps(cfg, laps=args.laps, learning=learning, seed=args.seed,
-                             on_lap=lambda lap, _p: print("  " + lap.line()))
+                             on_lap=lambda lap, _p: print("  " + lap.line()),
+                             on_tick=on_tick if (track is not None and learning) else None)
         s = summaries[label] = summarise(laps)
         print(f"  closest approach {s['closest_first_m']:.2f} m -> {s['closest_last_m']:.2f} m"
               f" | collisions {s['collisions_first']} -> {s['collisions_last']}"
@@ -279,6 +311,9 @@ def cmd_learn(args) -> int:
               f" | memory {s['memory']:.2f}")
         if args.csv:
             _write_log(args.csv if len(runs) == 1 else f"{label.split()[0]}-{args.csv}", [lap.as_dict() for lap in laps])
+    if track is not None:
+        track.save(args.track)
+        print(f"track -> {args.track} ({track.summary()}); watch it with tools/record_flight_3d.mjs")
     if args.compare:
         a, b = summaries["learning"], summaries["no learning (control)"]
         print(f"\nthe same brain, the same room, the same seed: {a['closest_last_m']:.2f} m of clearance with the"
@@ -308,16 +343,31 @@ def cmd_radio(args) -> int:
     print(station.sinks.describe())
     _wait_for_browser(station.sinks, args.wait)
     seen = [0]
+    track = None
+    if args.track:
+        from .track import TrackRecorder
+
+        track = TrackRecorder(title=STATION, subtitle="a station played by a fly brain")
 
     def on_tick(st, _frame):
         while seen[0] < len(st.entries):  # the station log is the terminal output
             e = st.entries[seen[0]]
             seen[0] += 1
             print(f"  {int(e.t // 60):3d}:{int(e.t % 60):02d}  {e.kind:<10s} {e.text}")
+            if track is not None:
+                if e.kind == "show":
+                    track.chapter(e.t, st.show.name, st.show.blurb)
+                elif e.kind not in ("station", "slow"):
+                    track.event(e.t, e.kind, e.text)
+        if track is not None and st.last_info is not None:
+            track.add(st.last_info)
 
     station.start()
     on_tick(station, None)
     station.run(seconds=(args.hours * 3600 if args.hours else None), on_tick=on_tick)
+    if track is not None:
+        track.save(args.track)
+        print(f"track -> {args.track} ({track.summary()})")
     c = station.counts
     plural = lambda n, one, many: f"{n} {one if n == 1 else many}"  # noqa: E731
     print(f"\noff air after {station.t / 60:.1f} minutes: {plural(c['shows'], 'show', 'shows')}, "
@@ -564,6 +614,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--live", action="store_true", help="show the dashboard in a window (needs OpenCV)")
     sp.add_argument("--log", help="write a CSV flight log")
     sp.add_argument("--music", help="also play it: comma separated targets, see `compose --help`")
+    sp.add_argument("--track", help="write a 3D flight track (JSON) for docs/live/replay.html")
     sp.set_defaults(func=cmd_demo)
 
     sp = sub.add_parser("swarm", help="one connectome, several drone pilots (simulated)")
@@ -654,6 +705,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--root")
     sp.add_argument("--latency", type=float)
     sp.add_argument("--wait", type=float, default=30, help="seconds to wait for a browser before going on air")
+    sp.add_argument("--track", help="write a 3D flight track (JSON) for docs/live/replay.html")
     sp.set_defaults(func=cmd_radio)
 
     sp = sub.add_parser("learn", help="watch the mushroom body learn to avoid the chair")
@@ -664,6 +716,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="same flight with the plasticity switched off")
     sp.add_argument("--compare", action="store_true", help="fly it both ways and print the two side by side")
     sp.add_argument("--csv", help="write the laps to a CSV")
+    sp.add_argument("--track", help="write a 3D flight track (JSON) for docs/live/replay.html")
     sp.set_defaults(func=cmd_learn)
 
     sp = sub.add_parser("calibrate", help="fit the descending-neuron read-out for this brain")

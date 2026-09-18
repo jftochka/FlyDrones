@@ -29,6 +29,6 @@ jobs:
       - name: Smoke radio
         run: flydrones radio --minutes-per-show 0.05 --hours 0.004 --wait 0 --to "print:4,jsonl:radio.jsonl"
       - name: Smoke learning
-        run: flydrones learn --laps 3
+        run: flydrones learn --laps 3 --track /tmp/ci-track.json
       - name: Browser engine matches Python
         run: node tools/check_web_engine.mjs

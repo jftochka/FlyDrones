@@ -15,6 +15,7 @@ This is the long version of the README, step by step, from zero to a drone in th
 - [9. Tuning cheat-sheet](#9-tuning-cheat-sheet)
 - [10. Make it play music](#10-make-it-play-music)
 - [11. Teach it something](#11-teach-it-something)
+- [12. Watch it in 3D](#12-watch-it-in-3d)
 
 ## Try it in the browser first
 
@@ -208,3 +209,14 @@ first fly ends up keeping nearly two metres away from something it has only seen
 dodging at the last moment. Nothing about the flight code changes between them — a few hundred synapses do.
 The same brain also carries a compass: `pilot.cognition.set_goal(90)` and it turns until its own heading
 estimate says 90 degrees. Full write-up: [COGNITION.md](COGNITION.md).
+
+## 12. Watch it in 3D
+
+```bash
+flydrones learn --laps 8 --track docs/live/tracks/learn.json
+python -m http.server -d docs 8000       # then open http://localhost:8000/live/replay.html
+```
+
+The flight you just flew, drawn into the same bedroom: the path blue where the fly had learned nothing and
+green once it had, markers where the giant fibre fired or it learned something, and the compass needle
+turning on the right. `python tools/record_flight_3d.py --mp4` records it. Details: [REPLAY.md](REPLAY.md).

@@ -82,6 +82,14 @@ watches for anything worth saying, and keeps the drone in the air across pack sw
 knows goes to listeners through `Sink.set_context`, which the browser target merges into every frame.
 See [RADIO.md](RADIO.md).
 
+## Replay
+
+`track.py` writes a flight down — position, heading, commands, and what the mushroom body and the compass
+knew at the time — and `docs/live/replay.html` renders it in the same 3D bedroom, with the path coloured by
+how much the fly had learned by that point. It is the only way to see cognition in 3D, because the browser
+engine does not have any: see [REPLAY.md](REPLAY.md). `tools/record_flight_3d.py` drives that page frame by
+frame in headless Chromium to make the GIFs.
+
 ## Browser port
 
 `docs/index.html` + `docs/live/` is the GitHub Pages demo. `engine.js` is a line-by-line JavaScript port of the

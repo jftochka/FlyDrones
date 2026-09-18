@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlyDrones · flight replay</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%230d1117%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%2339ff88%27/%3E%3C/svg%3E">
+<style>
+  :root { --fg:#e6edf6; --dim:#93a3ba; --green:#39ff88; --blue:#4cc9f0; --pink:#ff4d8d; --amber:#ffb020; --violet:#b388ff; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:#05070b; color:var(--fg); overflow:hidden;
+               font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #scene { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .panel { position:fixed; background:rgba(9,13,19,.72); border:1px solid rgba(120,150,190,.22);
+           border-radius:12px; padding:12px 14px; backdrop-filter:blur(8px); }
+  #title { top:16px; left:16px; max-width:min(46vw, 560px); }
+  #title h1 { margin:0; font-size:15px; letter-spacing:.1em; text-transform:uppercase; color:var(--green); }
+  #title p { margin:4px 0 0; color:var(--dim); font-size:12px; }
+  #chapter { margin-top:8px; color:var(--amber); font-size:13px; letter-spacing:.04em; }
+  #stats { top:16px; right:16px; width:224px; }
+  #stats h2 { margin:0 0 8px; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); }
+  .m { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  .m span.k { color:var(--dim); width:74px; font-size:11px; }
+  .m span.v { color:var(--blue); width:44px; text-align:right; font-variant-numeric:tabular-nums; font-size:11px; }
+  .m .bar { flex:1; height:6px; background:#0a0f16; border-radius:3px; overflow:hidden; }
+  .m .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--blue),var(--green)); }
+  .dial { display:flex; justify-content:center; margin-top:6px; }
+  #caption { left:50%; transform:translateX(-50%); bottom:92px; padding:9px 18px; font-size:15px;
+             letter-spacing:.03em; opacity:0; transition:opacity .35s; white-space:nowrap; }
+  #legend { left:16px; bottom:92px; font-size:11px; color:var(--dim); }
+  #legend b { color:var(--fg); font-weight:400; }
+  .swatch { display:inline-block; width:22px; height:3px; vertical-align:middle; margin-right:6px; border-radius:2px; }
+  #bar { left:50%; transform:translateX(-50%); bottom:16px; display:flex; gap:12px; align-items:center;
+         width:min(760px, calc(100vw - 32px)); }
+  #bar button { background:transparent; color:var(--fg); border:1px solid rgba(120,150,190,.3); border-radius:7px;
+                padding:6px 12px; font-family:inherit; font-size:12px; cursor:pointer; }
+  #bar button.on, #bar button:hover { border-color:var(--green); color:var(--green); }
+  #seek { flex:1; accent-color:var(--green); }
+  #clock { color:var(--dim); font-variant-numeric:tabular-nums; min-width:96px; }
+  body.rec .panel { border-color:rgba(120,150,190,.28); }
+  body.rec #bar, body.rec #legend { display:none; }
+  /* recording: the top right of the room is where the chair is, so the brain
+     panel moves out of its way and down into the empty floor */
+  body.rec #stats { top:auto; bottom:16px; }
+  body.rec #caption { bottom:24px; left:26px; transform:none; }
+  #err { position:fixed; inset:0; display:none; place-items:center; text-align:center; color:var(--pink); padding:40px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three.module.min.js", "three/addons/": "../vendor/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="panel" id="title">
+  <h1 id="t-title">FlyDrones</h1>
+  <p id="t-sub"></p>
+  <div id="chapter"></div>
+</div>
+
+<div class="panel" id="stats">
+  <h2>What the brain knows</h2>
+  <div class="dial">
+    <svg width="86" height="86" viewBox="-44 -44 88 88">
+      <circle r="39" fill="#0a0f16" stroke="rgba(120,150,190,.25)"></circle>
+      <g stroke="rgba(120,150,190,.3)">
+        <line x1="0" y1="-39" x2="0" y2="-33"></line><line x1="0" y1="39" x2="0" y2="33"></line>
+        <line x1="-39" y1="0" x2="-33" y2="0"></line><line x1="39" y1="0" x2="33" y2="0"></line>
+      </g>
+      <line id="goalNeedle" x1="0" y1="0" x2="0" y2="-34" stroke="#b388ff" stroke-width="2" stroke-dasharray="3 3" opacity="0"></line>
+      <line id="needle" x1="0" y1="0" x2="0" y2="-30" stroke="#39ff88" stroke-width="3" stroke-linecap="round"></line>
+      <circle r="3" fill="#39ff88"></circle>
+    </svg>
+  </div>
+  <div class="m"><span class="k">heading</span><span class="v" id="v-heading">—</span></div>
+  <div class="m"><span class="k">memory</span><span class="v" id="v-memory">0.00</span><div class="bar"><i id="b-memory"></i></div></div>
+  <div class="m"><span class="k">MBON</span><span class="v" id="v-mbon">0</span><div class="bar"><i id="b-mbon"></i></div></div>
+  <div class="m"><span class="k">lift</span><span class="v" id="v-drive">0.00</span><div class="bar"><i id="b-drive"></i></div></div>
+  <div class="m"><span class="k">looming</span><span class="v" id="v-loom">0.00</span><div class="bar"><i id="b-loom"></i></div></div>
+  <div class="m"><span class="k">altitude</span><span class="v" id="v-alt">0.00</span><div class="bar"><i id="b-alt"></i></div></div>
+</div>
+
+<div class="panel" id="caption"></div>
+<div class="panel" id="legend">
+  <div><span class="swatch" style="background:linear-gradient(90deg,#4cc9f0,#39ff88)"></span><b>the path</b>, blue before it learned anything, green after</div>
+  <div style="margin-top:3px"><span class="swatch" style="background:#ffb020"></span><b>escape</b> · <span class="swatch" style="background:#ff4d8d"></span><b>bump</b> · <span class="swatch" style="background:#39ff88"></span><b>a lesson</b></div>
+</div>
+
+<div class="panel" id="bar">
+  <button id="play">▶</button>
+  <input id="seek" type="range" min="0" max="1000" value="0">
+  <span id="clock">0:00 / 0:00</span>
+  <button id="speed">1×</button>
+  <button id="view">orbit</button>
+  <button id="theme">night</button>
+</div>
+
+<div id="err"></div>
+<script type="module" src="./replay.js"></script>
+</body>
+</html>

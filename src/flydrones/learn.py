@@ -70,7 +70,7 @@ def make_pilot(cfg: dict, seed: int = 0) -> Pilot:
     return pilot
 
 
-def fly_lap(pilot: Pilot, index: int, t0: float = 0.0, seconds: float = 9.0, hz: float = 20.0) -> Lap:
+def fly_lap(pilot: Pilot, index: int, t0: float = 0.0, seconds: float = 9.0, hz: float = 20.0, on_tick=None) -> Lap:
     """One approach, from the same place, until it is past the chair or out of time."""
     dt = 1.0 / hz
     d = pilot.drone
@@ -87,6 +87,8 @@ def fly_lap(pilot: Pilot, index: int, t0: float = 0.0, seconds: float = 9.0, hz:
         info = pilot.tick(t0 + t, dt)
         for _ in range(4):
             d.step(dt / 4)
+        if on_tick:
+            on_tick(pilot, info, index)
         closest = min(closest, float(math.dist(d.pos[:2], CHAIR)))
         if info.cmd.escape and not escaping:
             escapes += 1
@@ -102,14 +104,14 @@ def fly_lap(pilot: Pilot, index: int, t0: float = 0.0, seconds: float = 9.0, hz:
     return Lap(index, d.collisions - hits0, escapes, closest, memory, mbon / max(1, n), turn / max(1, n), t)
 
 
-def approach_laps(cfg: dict, laps: int = 10, learning: bool = True, seed: int = 0, on_lap=None) -> list[Lap]:
+def approach_laps(cfg: dict, laps: int = 10, learning: bool = True, seed: int = 0, on_lap=None, on_tick=None) -> list[Lap]:
     """Fly ``laps`` approaches with one brain, learning between them."""
     cfg = approach_config(cfg, learning)
     pilot = make_pilot(cfg, seed=seed)
     out: list[Lap] = []
     t = 0.0
     for i in range(int(laps)):
-        lap = fly_lap(pilot, i + 1, t0=t, hz=float(cfg["control"]["hz"]))
+        lap = fly_lap(pilot, i + 1, t0=t, hz=float(cfg["control"]["hz"]), on_tick=on_tick)
         t += lap.seconds + 0.5
         out.append(lap)
         if on_lap:

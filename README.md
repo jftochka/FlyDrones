@@ -158,6 +158,14 @@ A sparse code of what the eye sees lands on **360 Kenyon cells**; **APL** keeps 
 
 Alongside it, a ring of **EPG** columns holds a heading: **Delta7** inhibition leaves a single bump, **PEN** cells driven by the halteres push it round as the body turns (0.0°/s of drift while hovering), and **PFL3** steers until the bump lines up with a goal held by **FC2** — so `set_goal(90)` makes the fly turn and hold a course it worked out itself. Full write-up, with every number measured: **[docs/COGNITION.md](docs/COGNITION.md)**.
 
+## Watch a flight in 3D
+
+<p align="center"><img src="assets/flight3d.gif" alt="Eight approaches to a chair, replayed in 3D: the path turns from blue to green as the fly learns" width="100%"></p>
+
+The browser demo flies its own copy of the brain, and that copy has no mushroom body — so a learning flight cannot be flown in the browser, only replayed there. `flydrones learn --track flight.json` writes down where the drone was and what the brain knew; `docs/live/replay.html` draws it in the same bedroom.
+
+The path is **blue where the fly had learned nothing and green once it had**, the whole flight is faintly visible from the first frame so you can see every approach at once, and the markers are the moments — *the giant fibre fired*, *it has learned something*. On the right: the compass needle, the memory, and the MBON the memory is switching off. Space plays, the buttons switch to the chase camera or to the drone's own. `python tools/record_flight_3d.py` records it to a GIF or an MP4 without a GPU. Details: **[docs/REPLAY.md](docs/REPLAY.md)**.
+
 ## Radio Cognitive Fruit Fly
 
 <p align="center"><b>an always-on station, played by the connectome</b></p>
@@ -258,6 +266,7 @@ src/flydrones/
   calibrate.py fit the read-out on your connectome
   learn.py     the learning experiment: approaches to the chair, with and without plasticity
   radio.py     the station: a programme of shows, and a fly that never lands
+  track.py     a flight written down, for the 3D replay page
   music/       compositor.py (neurons -> notes) · sinks.py (Pd, Max, Tidal, SuperDirt, Strudel) · osc.py
                patterns.py (mini-notation) · server.py (SSE) · patches/ · web/ (the Strudel page)
   viz/         live dashboard and GIF recorder
