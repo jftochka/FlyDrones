@@ -243,6 +243,10 @@ the same score works on MiniFly (DNg02 idles near 31 Hz) and on MaleCNS, where i
 somewhere else entirely. Point a voice at any group in `inputs:` or `outputs:` — if you
 add a cell type to the connectome config, it can play.
 
+For a programme that runs for hours rather than one flight, see
+[RADIO.md](RADIO.md): `flydrones radio` is this compositor with shows, a station
+page and a fly that never lands.
+
 Any flight can drive music, not only `compose`:
 
 ```bash

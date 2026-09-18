@@ -158,6 +158,18 @@ A sparse code of what the eye sees lands on **360 Kenyon cells**; **APL** keeps 
 
 Alongside it, a ring of **EPG** columns holds a heading: **Delta7** inhibition leaves a single bump, **PEN** cells driven by the halteres push it round as the body turns (0.0°/s of drift while hovering), and **PFL3** steers until the bump lines up with a goal held by **FC2** — so `set_goal(90)` makes the fly turn and hold a course it worked out itself. Full write-up, with every number measured: **[docs/COGNITION.md](docs/COGNITION.md)**.
 
+## Radio Cognitive Fruit Fly
+
+<p align="center"><b>an always-on station, played by the connectome</b></p>
+
+```bash
+flydrones radio            # open the address it prints and press play
+```
+
+Six shows, forty minutes, then round again: hovering in C minor pentatonic; nine minutes of flying at a chair until it has learned to keep away from it; five minutes of that memory fading; a show where it is given a new heading every thirty seconds and has to find it with its own compass; a fast one where things rush at it. The page shows what is playing, the heading needle, the memory bar, the voices lighting up, and a log of what the fly has been doing — *the giant fibre fired*, *it has learned something: memory 0.24*, *it is holding 232°*.
+
+The fly is flying the whole time, learning while on air and carrying what it learned into the next show. `--to pd,superdirt,tidal` sends the same notes to your own instruments. Details: **[docs/RADIO.md](docs/RADIO.md)**.
+
 ## Play it: the fly brain drone compositor
 
 <p align="center"><b>Pure Data · Max/MSP · TidalCycles · Strudel</b></p>
@@ -245,6 +257,7 @@ src/flydrones/
   runtime.py   the closed loop
   calibrate.py fit the read-out on your connectome
   learn.py     the learning experiment: approaches to the chair, with and without plasticity
+  radio.py     the station: a programme of shows, and a fly that never lands
   music/       compositor.py (neurons -> notes) · sinks.py (Pd, Max, Tidal, SuperDirt, Strudel) · osc.py
                patterns.py (mini-notation) · server.py (SSE) · patches/ · web/ (the Strudel page)
   viz/         live dashboard and GIF recorder

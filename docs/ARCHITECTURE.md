@@ -74,6 +74,14 @@ TidalCycles, SuperDirt, Strudel or a file. It reads the spike raster, so notes c
 neurons fired rather than the control grid. Nothing in it can change a command — the music is downstream of
 the safety governor. See [MUSIC.md](MUSIC.md).
 
+## The station
+
+`radio.py` is a programme (a list of `Show`s) on top of one `Pilot` and one `Compositor`: it applies a show's
+key, tempo, cruise and learning, drives the scenario (laps at the chair, a new goal every thirty seconds),
+watches for anything worth saying, and keeps the drone in the air across pack swaps and landings. What it
+knows goes to listeners through `Sink.set_context`, which the browser target merges into every frame.
+See [RADIO.md](RADIO.md).
+
 ## Browser port
 
 `docs/index.html` + `docs/live/` is the GitHub Pages demo. `engine.js` is a line-by-line JavaScript port of the

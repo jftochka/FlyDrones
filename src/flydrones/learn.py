@@ -121,6 +121,7 @@ def summarise(laps: list[Lap], window: int = 3) -> dict:
     """First few laps against the last few: the whole experiment in six numbers."""
     if not laps:
         return {}
+    window = max(1, min(int(window), len(laps) // 2))  # never compare a run against itself
     first, last = laps[:window], laps[-window:]
     mean = lambda rows, key: float(np.mean([getattr(r, key) for r in rows]))  # noqa: E731
     return {

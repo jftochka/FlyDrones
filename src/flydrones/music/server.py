@@ -30,8 +30,9 @@ def asset(name: str) -> str:
 class EventServer:
     """Broadcasts JSON frames to every connected browser."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8765, queue_size: int = 64):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8765, queue_size: int = 64, page: str = "index.html"):
         self.host, self.port = host, int(port)
+        self.page = page  # the station swaps this for its own front page
         self.queue_size = int(queue_size)
         self._clients: list[queue.Queue] = []
         self._lock = threading.Lock()
@@ -113,8 +114,9 @@ def _make_server(hub: EventServer) -> ThreadingHTTPServer:
 
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's spelling
             path = self.path.split("?")[0]
-            if path in ("/", "/index.html"):
-                return self._send(asset("index.html"), CONTENT_TYPES[".html"])
+            if path in ("/", "/index.html", "/radio.html"):
+                name = hub.page if path == "/" else path.lstrip("/")
+                return self._send(asset(name), CONTENT_TYPES[".html"])
             if path == "/flybrain.mjs":
                 return self._send(asset("flybrain.mjs"), CONTENT_TYPES[".mjs"])
             if path == "/state.json":
@@ -155,7 +157,7 @@ def write_assets(directory: str | Path) -> list[Path]:
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
     written = []
-    for name in ("index.html", "flybrain.mjs"):
+    for name in ("index.html", "radio.html", "flybrain.mjs"):
         p = out / name
         p.write_text(asset(name), encoding="utf-8")
         written.append(p)

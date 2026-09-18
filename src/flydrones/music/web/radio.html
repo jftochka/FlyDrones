@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%230d1117%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%275%27 fill=%27%2339ff88%27/%3E%3C/svg%3E">
+<title>Radio Cognitive Fruit Fly</title>
+<style>
+  :root { --bg:#080b10; --panel:#11161f; --line:#222d3d; --fg:#cfdae8; --dim:#78889f;
+          --green:#39ff88; --blue:#4cc9f0; --pink:#ff4d8d; --amber:#ffb86b; --violet:#b388ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:
+      radial-gradient(1200px 600px at 20% -10%, #14202e 0%, transparent 60%), var(--bg);
+      color:var(--fg); font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+  h1 { margin:0; font-size:17px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); }
+  .onair { display:inline-flex; align-items:center; gap:7px; font-size:11px; letter-spacing:.14em;
+           text-transform:uppercase; color:var(--pink); }
+  .onair i { width:9px; height:9px; border-radius:50%; background:var(--pink); animation:pulse 1.6s infinite; }
+  .onair.live i { background:var(--green); box-shadow:0 0 10px var(--green); }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+  .sub { color:var(--dim); font-size:12px; }
+  main { display:grid; grid-template-columns: minmax(320px, 1.15fr) minmax(300px, .85fr); gap:18px; padding:18px; align-items:start; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:15px; }
+  h2 { margin:0 0 11px; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); }
+  .show { font-size:20px; color:var(--amber); margin:0 0 6px; letter-spacing:.02em; }
+  .blurb { color:var(--fg); opacity:.85; margin:0 0 12px; font-size:13px; }
+  .progress { height:6px; background:#070a0e; border-radius:3px; overflow:hidden; }
+  .progress i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--amber),var(--pink)); transition:width .4s linear; }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:2px 0; font-size:12px; }
+  td.k { color:var(--dim); width:96px; }
+  td.v { color:var(--blue); width:58px; text-align:right; padding-right:8px; font-variant-numeric:tabular-nums; }
+  .bar { height:7px; background:#070a0e; border-radius:4px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--blue),var(--green)); }
+  .voices { display:flex; flex-wrap:wrap; gap:6px; }
+  .voice { border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:11px; color:var(--dim); transition:.12s; }
+  .voice.lit { color:#06240f; background:var(--green); border-color:var(--green); }
+  #log { list-style:none; margin:0; padding:0; max-height:270px; overflow:auto; }
+  #log li { padding:4px 0; border-bottom:1px solid #182130; font-size:12px; display:flex; gap:8px; }
+  #log time { color:var(--dim); font-variant-numeric:tabular-nums; }
+  .kind-learning, .kind-lap { color:var(--green); }
+  .kind-escape, .kind-bump { color:var(--pink); }
+  .kind-show, .kind-station { color:var(--amber); }
+  .kind-goal { color:var(--violet); }
+  .kind-forgetting, .kind-pack, .kind-recovery, .kind-slow { color:var(--dim); }
+  button { background:var(--green); color:#06240f; border:0; border-radius:7px; padding:9px 18px; font-weight:700;
+           letter-spacing:.06em; cursor:pointer; font-family:inherit; }
+  button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  textarea { width:100%; min-height:200px; background:#070a0e; color:var(--fg); border:1px solid var(--line);
+             border-radius:8px; padding:10px; font:12.5px/1.5 ui-monospace,Menlo,monospace; resize:vertical; margin-top:8px; }
+  .hint, code { color:var(--dim); font-size:11.5px; }
+  #err { color:var(--pink); font-size:12px; min-height:16px; margin-top:6px; white-space:pre-wrap; }
+  .dial { display:flex; align-items:center; gap:14px; }
+  .dial svg { flex:none; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Radio Cognitive Fruit Fly</h1>
+  <span class="onair" id="onair"><i></i><span id="state">tuning in…</span></span>
+  <span class="sub" id="uptime">—</span>
+  <span class="sub" id="listeners"></span>
+  <span class="sub" id="neurons"></span>
+</header>
+
+<main>
+  <section>
+    <h2>On air</h2>
+    <p class="show" id="show">—</p>
+    <p class="blurb" id="blurb"></p>
+    <div class="progress"><i id="progress"></i></div>
+    <div class="row sub"><span id="left"></span><span id="key"></span><span id="next"></span></div>
+
+    <h2 style="margin-top:18px">Listen</h2>
+    <p class="hint" style="margin:0">Strudel plays it in this tab. Every value in the pattern comes from a neuron;
+      edit it and press play again.</p>
+    <textarea id="code" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="play">▶ play</button>
+      <button id="stop" class="ghost">■ hush</button>
+      <button id="reset" class="ghost">reset</button>
+      <span class="hint">or point Pure Data, Max or SuperDirt at it: <code>flydrones radio --to pd,superdirt</code></span>
+    </div>
+    <div id="err"></div>
+    <h2 style="margin-top:16px">Voices</h2>
+    <div class="voices" id="voices"></div>
+  </section>
+
+  <section>
+    <h2>The brain, live</h2>
+    <div class="dial">
+      <svg width="104" height="104" viewBox="-52 -52 104 104" aria-label="heading">
+        <circle r="46" fill="#070a0e" stroke="#222d3d"></circle>
+        <g stroke="#222d3d">
+          <line x1="0" y1="-46" x2="0" y2="-38"></line><line x1="0" y1="46" x2="0" y2="38"></line>
+          <line x1="-46" y1="0" x2="-38" y2="0"></line><line x1="46" y1="0" x2="38" y2="0"></line>
+        </g>
+        <line id="goal" x1="0" y1="0" x2="0" y2="-40" stroke="#b388ff" stroke-width="2" stroke-dasharray="3 3" opacity="0"></line>
+        <line id="needle" x1="0" y1="0" x2="0" y2="-36" stroke="#39ff88" stroke-width="3" stroke-linecap="round"></line>
+        <circle r="3.5" fill="#39ff88"></circle>
+      </svg>
+      <div>
+        <div class="sub">heading <b id="heading" style="color:var(--green)">—</b></div>
+        <div class="sub">goal <b id="goalTxt" style="color:var(--violet)">none</b></div>
+        <div class="sub">the compass is the fly's own, and starts from where it took off</div>
+      </div>
+    </div>
+    <table id="meters" style="margin-top:12px"></table>
+    <h2 style="margin-top:16px">Station log</h2>
+    <ul id="log"></ul>
+  </section>
+</main>
+
+<script src="https://unpkg.com/@strudel/web@1.3.0"></script>
+<script type="module">
+import { connectFly } from './flybrain.mjs';
+
+const DEFAULT_PATTERN = `// Radio Cognitive Fruit Fly. Every number below is a neuron.
+stack(
+  // the wings: DNg02, one line per side of the mix
+  note(signal(() => fly.n('wing_left', 60))).s("triangle").pan(.2).struct("t*4"),
+  note(signal(() => fly.n('wing_right', 60))).s("triangle").pan(.8).struct("~ t ~ t"),
+
+  // lift, opened up by what the eyes see
+  note(signal(() => fly.n('lift', 36))).s("sawtooth").struct("t ~ ~ t")
+    .lpf(signal(() => 250 + 3500 * fly.c('bright'))).gain(.7),
+
+  // what it has learned: this one only arrives once the MBON lets go
+  note(signal(() => fly.n('memory', 50))).s("square").struct("t ~")
+    .gain(signal(() => .25 + .5 * fly.c('memory'))).room(.4),
+
+  // and the lesson itself
+  note(signal(() => fly.n('dopamine', 31))).s("sawtooth").struct("t*2")
+    .gain(signal(() => fly.gate('dopamine', .6))).decay(.35),
+
+  // something coming at it
+  note(signal(() => fly.n('loom', 84))).s("square").struct("t*8")
+    .gain(signal(() => .5 * fly.c('loom')))
+).gain(signal(() => .35 + .45 * fly.c('drive')))`;
+
+const $ = (id) => document.getElementById(id);
+const fly = connectFly('/events', { onStatus: (s) => {
+  $('state').textContent = s === 'connected' ? 'on air' : s;
+  $('onair').classList.toggle('live', s === 'connected');
+}});
+$('code').value = DEFAULT_PATTERN;
+
+// The station sends more than the music: keep the whole payload as well.
+const applyFrame = fly.apply.bind(fly);
+fly.apply = (frame) => { fly.station = frame; applyFrame(frame); };
+
+const METERS = [['memory','memory'],['drive','lift (DNg02)'],['loom','looming'],['kc','Kenyon cells'],
+                ['mbon','MBON'],['alt','altitude'],['bright','brightness'],['battery','battery']];
+const rows = {};
+for (const [key, label] of METERS) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="k">${label}</td><td class="v">0.00</td><td><div class="bar"><i></i></div></td>`;
+  $('meters').appendChild(tr);
+  rows[key] = { v: tr.children[1], bar: tr.children[2].firstElementChild.firstElementChild };
+}
+const lamps = {};
+fly.onNote((e) => {
+  let el = lamps[e.voice];
+  if (!el) {
+    el = lamps[e.voice] = document.createElement('span');
+    el.className = 'voice';
+    el.textContent = e.voice;
+    $('voices').appendChild(el);
+  }
+  el.classList.add('lit');
+  setTimeout(() => el.classList.remove('lit'), Math.max(90, e.duration * 1000));
+});
+
+let lastLog = -1;
+function paint() {
+  for (const [key] of METERS) {
+    const v = fly.c(key);
+    rows[key].v.textContent = v.toFixed(2);
+    rows[key].bar.style.width = `${Math.min(100, Math.abs(v) * 100)}%`;
+  }
+  const st = fly.station || {};
+  const show = st.show || {};
+  if (show.name) {
+    $('show').textContent = show.name;
+    $('blurb').textContent = show.blurb || '';
+    const left = show.left_s || 0;
+    $('left').textContent = left < 60 ? `${Math.ceil(left)}s left` : `${Math.ceil(left / 60)} min left`;
+    $('key').textContent = `· ${show.scale || ''} · ${(fly.cps * 60 * 4).toFixed(0)} bpm${show.learning ? ' · learning' : ''}`;
+    $('next').textContent = `· next: ${st.next || '—'}`;
+    $('progress').style.width = `${100 * (1 - (show.left_s || 0) / (show.length_s || 1))}%`;
+  }
+  if (st.uptime_s != null) {
+    const m = Math.floor(st.uptime_s / 60), s = Math.floor(st.uptime_s % 60);
+    const c = st.counts || {};
+    $('uptime').textContent = `${m}m ${String(s).padStart(2, '0')}s on air · ${c.escapes || 0} escapes · ${c.lessons || 0} lessons`;
+  }
+  if (st.listeners != null) $('listeners').textContent = `${st.listeners} listening`;
+  if (st.brain) {
+    $('neurons').textContent = `${st.brain.neurons.toLocaleString()} neurons · ${st.brain.realtime}× real time`;
+    const h = st.brain.heading;
+    $('heading').textContent = h == null ? '—' : `${h.toFixed(0)}°`;
+    if (h != null) $('needle').setAttribute('transform', `rotate(${h})`);
+    const g = st.brain.goal;
+    $('goalTxt').textContent = g == null ? 'none' : `${g.toFixed(0)}°`;
+    $('goal').setAttribute('opacity', g == null ? 0 : 1);
+    if (g != null) $('goal').setAttribute('transform', `rotate(${g})`);
+  }
+  const log = st.log || [];
+  if (log.length && log[log.length - 1].t !== lastLog) {
+    lastLog = log[log.length - 1].t;
+    $('log').innerHTML = log.slice().reverse().map((e) => {
+      const m = Math.floor(e.t / 60), s = String(Math.floor(e.t % 60)).padStart(2, '0');
+      const text = e.text.replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch]));
+      return `<li class="kind-${e.kind}"><time>${m}:${s}</time><span>${text}</span></li>`;
+    }).join('');
+  }
+  requestAnimationFrame(paint);
+}
+paint();
+
+let started = false;
+async function start() {
+  if (typeof initStrudel !== 'function') {
+    $('err').textContent = 'Strudel did not load (offline, or the CDN is blocked). The station panel still works.';
+    return false;
+  }
+  if (!started) {
+    await initStrudel({ prebake: () => samples('github:tidalcycles/dirt-samples').catch(() => {}) });
+    fly.useStrudel({ signal: globalThis.signal });
+    started = true;
+    setInterval(() => { if (globalThis.setcps && fly.frames) setcps(fly.cps); }, 500);
+  }
+  return true;
+}
+$('play').addEventListener('click', async () => {
+  if (!(await start())) return;
+  try { $('err').textContent = ''; await evaluate($('code').value); }
+  catch (e) { $('err').textContent = String(e); }
+});
+$('stop').addEventListener('click', () => { try { hush(); } catch (e) { $('err').textContent = String(e); } });
+$('reset').addEventListener('click', () => { $('code').value = DEFAULT_PATTERN;
+
+// The station sends more than the music: keep the whole payload as well.
+const applyFrame = fly.apply.bind(fly);
+fly.apply = (frame) => { fly.station = frame; applyFrame(frame); }; });
+</script>
+</body>
+</html>

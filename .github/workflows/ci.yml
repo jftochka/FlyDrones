@@ -26,5 +26,9 @@ jobs:
         run: flydrones demo --seconds 4
       - name: Smoke compose
         run: flydrones compose --seconds 6 --fast --to "print,jsonl:score.jsonl" --score score.tidal
+      - name: Smoke radio
+        run: flydrones radio --minutes-per-show 0.05 --hours 0.004 --wait 0 --to "print:4,jsonl:radio.jsonl"
+      - name: Smoke learning
+        run: flydrones learn --laps 3
       - name: Browser engine matches Python
         run: node tools/check_web_engine.mjs

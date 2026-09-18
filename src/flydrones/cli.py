@@ -286,6 +286,46 @@ def cmd_learn(args) -> int:
     return 0
 
 
+def cmd_radio(args) -> int:
+    """Radio Cognitive Fruit Fly: a station that does not stop."""
+    from dataclasses import replace
+
+    from .radio import PROGRAMME, STATION, Station
+
+    print(BANNER)
+    cfg = _music_cfg(_cfg(args), args)
+    programme = list(PROGRAMME)
+    if args.minutes_per_show:
+        programme = [replace(show, minutes=args.minutes_per_show) for show in programme]
+    if args.show:
+        wanted = args.show.lower()
+        programme = [s for s in programme if wanted in s.name.lower()] or programme
+    station = Station(cfg, targets=args.to, seed=args.seed, programme=programme)
+    total = sum(s.minutes for s in programme)
+    print(f"{STATION}: {len(programme)} shows, {total:.0f} minutes a round, {station.brain.n_neurons:,} neurons")
+    for show in programme:
+        print(f"  {show.minutes:4.1f} min  {show.name:<14s} {show.scale}/{show.root}  {show.blurb[:74]}")
+    print(station.sinks.describe())
+    _wait_for_browser(station.sinks, args.wait)
+    seen = [0]
+
+    def on_tick(st, _frame):
+        while seen[0] < len(st.entries):  # the station log is the terminal output
+            e = st.entries[seen[0]]
+            seen[0] += 1
+            print(f"  {int(e.t // 60):3d}:{int(e.t % 60):02d}  {e.kind:<10s} {e.text}")
+
+    station.start()
+    on_tick(station, None)
+    station.run(seconds=(args.hours * 3600 if args.hours else None), on_tick=on_tick)
+    c = station.counts
+    plural = lambda n, one, many: f"{n} {one if n == 1 else many}"  # noqa: E731
+    print(f"\noff air after {station.t / 60:.1f} minutes: {plural(c['shows'], 'show', 'shows')}, "
+          f"{plural(c['escapes'], 'escape', 'escapes')}, {plural(c['lessons'], 'thing learned', 'things learned')}, "
+          f"{plural(c['collisions'], 'bump', 'bumps')}, {plural(c['packs'], 'pack swap', 'pack swaps')}")
+    return 0
+
+
 def cmd_calibrate(args) -> int:
     from .calibrate import calibrate
 
@@ -599,6 +639,22 @@ def build_parser() -> argparse.ArgumentParser:
     common(sp)
     sp.add_argument("--hz", type=float, default=100)
     sp.set_defaults(func=cmd_inspect)
+
+    sp = sub.add_parser("radio", help="Radio Cognitive Fruit Fly: an always-on station played by the brain",
+                        description="A programme of shows flown and composed live: the fly hovers, learns, "
+                                    "holds a heading and escapes, and the music follows what it is doing.")
+    common(sp)
+    sp.add_argument("--to", default="strudel", help="where the music goes (see `compose --help`)")
+    sp.add_argument("--hours", type=float, help="stop after this long (default: until Ctrl+C)")
+    sp.add_argument("--seed", type=int, default=0)
+    sp.add_argument("--minutes-per-show", type=float, dest="minutes_per_show",
+                    help="override every show's length, for a quick listen")
+    sp.add_argument("--show", help="play only the show whose name contains this")
+    sp.add_argument("--scale")
+    sp.add_argument("--root")
+    sp.add_argument("--latency", type=float)
+    sp.add_argument("--wait", type=float, default=30, help="seconds to wait for a browser before going on air")
+    sp.set_defaults(func=cmd_radio)
 
     sp = sub.add_parser("learn", help="watch the mushroom body learn to avoid the chair")
     common(sp)

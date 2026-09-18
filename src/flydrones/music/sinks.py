@@ -49,6 +49,13 @@ class Sink:
     def frame(self, frame: Frame) -> None:
         raise NotImplementedError
 
+    def set_context(self, context: dict) -> None:
+        """Whatever surrounds the music — the station, the show, the log.
+
+        Most targets have nowhere to put it: Pd wants notes, not a programme.
+        The ones that can (a browser, a file) override this.
+        """
+
     def describe(self) -> str:
         return self.kind
 
@@ -256,6 +263,10 @@ class StrudelSink(Sink):
 
     def __init__(self, host: str = "127.0.0.1", port: int = 8765, server: EventServer | None = None):
         self.server = (server or EventServer(host, port)).start()
+        self.context: dict = {}
+
+    def set_context(self, context: dict) -> None:
+        self.context = dict(context or {})
 
     @staticmethod
     def payload(frame: Frame) -> dict:
@@ -265,7 +276,7 @@ class StrudelSink(Sink):
                 "controls": {c.name: c.value for c in frame.controls}}
 
     def frame(self, frame: Frame) -> None:
-        self.server.publish(self.payload(frame))
+        self.server.publish({**self.payload(frame), **self.context, "listeners": self.server.clients})
 
     def describe(self) -> str:
         return f"{self.kind} -> open {self.server.url} ({self.server.clients} listening)"
@@ -306,6 +317,10 @@ class PrintSink(Sink):
         self.out = out
         self._next = 0.0
         self._notes = 0
+        self.context: dict = {}
+
+    def set_context(self, context: dict) -> None:
+        self.context = dict(context or {})
 
     def frame(self, frame: Frame) -> None:
         self._notes += len(frame.notes)
@@ -315,8 +330,12 @@ class PrintSink(Sink):
         drive = next((c.value for c in frame.controls if c.name == "drive"), 0.0)
         loom = next((c.value for c in frame.controls if c.name == "loom"), 0.0)
         bar = "█" * int(round(drive * 12)) + "·" * (12 - int(round(drive * 12)))
+        show = (self.context.get("show") or {}).get("name")
         line = (f"t={frame.t:6.1f}s  {frame.section:<7s} lift [{bar}] loom {loom:4.2f}  "
                 f"cycle {frame.cycle:6.2f}  {self._notes:4d} notes")
+        if show:
+            memory = (self.context.get("brain") or {}).get("memory", 0.0)
+            line += f"  · {show} · memory {memory:4.2f}"
         print(line, file=self.out)
 
     def describe(self) -> str:
@@ -334,6 +353,10 @@ class FanOut(Sink):
     def frame(self, frame: Frame) -> None:
         for s in self.sinks:
             s.frame(frame)
+
+    def set_context(self, context: dict) -> None:
+        for s in self.sinks:
+            s.set_context(context)
 
     def describe(self) -> str:
         return "\n".join(f"  {s.describe()}" for s in self.sinks)

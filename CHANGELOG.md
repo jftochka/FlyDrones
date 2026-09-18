@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+Radio Cognitive Fruit Fly (`flydrones radio`): an always-on station with a six-show programme, a front page
+that shows the heading needle, the memory bar and a live station log, pack swaps and recovery so the fly
+never lands for good, and the same `--to` targets as the compositor. See [docs/RADIO.md](docs/RADIO.md).
+
 Cognition: MiniFly gains a mushroom body (visual projection neurons -> 360 Kenyon cells -> APL feedback
 inhibition -> MBON-g1pedc, with PPL1 dopamine depressing the Kenyon-cell synapses that were active when
 something hurt) and a central complex (an EPG ring with Delta7 inhibition, PEN shift cells driven by the
